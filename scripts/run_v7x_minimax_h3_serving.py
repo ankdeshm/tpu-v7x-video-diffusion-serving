@@ -361,25 +361,28 @@ def stage_minimax_models(idx: int, bucket: str, need_base: bool, need_fasth3: bo
 
     fasth3_repo = "FastVideo/FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree"
     if need_fasth3:
-        t0 = time.time()
-        log(idx, "Pre-caching FastH3 4-step VSA checkpoint + overlay into /dev/shm/hf_cache...")
-        snapshot_download(
-            repo_id="kevin-mi/FastH3-4step-Preview-overlay",
-            revision="f769cb8001dae335089de7b250364335bc7cb183",
-            cache_dir=str(hf_cache / "hub"),
-            token=hf_token,
-            max_workers=16,
-        )
-        snapshot_download(
-            repo_id=fasth3_repo,
-            cache_dir=str(hf_cache / "hub"),
-            ignore_patterns=["*.mp4", "*.mov", "*.gif"],
-            token=hf_token,
-            max_workers=16,
-        )
-        log(idx, f"FastH3 + overlay cached in /dev/shm/hf_cache ({time.time() - t0:.1f}s)")
+        fh_marker = hf_cache / ".ready_fasth3"
+        if not fh_marker.exists():
+            t0 = time.time()
+            log(idx, "Pre-caching FastH3 4-step VSA checkpoint + overlay into /dev/shm/hf_cache...")
+            snapshot_download(
+                repo_id="kevin-mi/FastH3-4step-Preview-overlay",
+                revision="f769cb8001dae335089de7b250364335bc7cb183",
+                cache_dir=str(hf_cache / "hub"),
+                token=hf_token,
+                max_workers=16,
+            )
+            snapshot_download(
+                repo_id=fasth3_repo,
+                cache_dir=str(hf_cache / "hub"),
+                ignore_patterns=["*.mp4", "*.mov", "*.gif"],
+                token=hf_token,
+                max_workers=16,
+            )
+            fh_marker.write_text("ok\n")
+            log(idx, f"FastH3 + overlay cached in /dev/shm/hf_cache ({time.time() - t0:.1f}s)")
 
-    return str(base_dir), fasth3_repo
+    return str(base_dir / "FL2VA"), fasth3_repo
 
 
 def build_tpu_server_env(
