@@ -36,7 +36,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: wan22-serve
-        image: us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/vllm-torchtpu-bench:v0.32.0
+        image: us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/sglang-torchtpu-diffusion:v0.2.0
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
