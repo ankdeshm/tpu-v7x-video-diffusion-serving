@@ -13,7 +13,7 @@ RUN uv pip install --system "setuptools>=77.0.3,<81.0.0" wheel "setuptools-scm>=
     VLLM_OMNI_TARGET_DEVICE=cpu VLLM_OMNI_VERSION_OVERRIDE=0.32.0rc1 SETUPTOOLS_SCM_PRETEND_VERSION=0.32.0rc1 \
     uv pip install --system --no-build-isolation -c /tmp/vllm_omni_constraints.txt /workspace/vllm-omni && \
     uv pip install --system -c /tmp/vllm_omni_constraints.txt imageio imageio-ffmpeg opencv-python-headless av soundfile diffusers accelerate && \
-    python3 -c "import shutil, torch, torch_tpu, jax, vllm, vllm_torchtpu, vllm_omni; assert shutil.which('ffmpeg'); print('VLLM_OMNI_TPU_BUILD_OK', torch.__version__, torch_tpu.__version__, vllm.__version__)"
+    python3 -c "import importlib.metadata as md, shutil, torch, torch_tpu, jax, vllm, vllm_torchtpu, vllm_omni; assert shutil.which('ffmpeg'); print('VLLM_OMNI_TPU_BUILD_OK', torch.__version__, md.version('torch-tpu'), vllm.__version__)"
 
 WORKDIR /workspace
 CMD ["/bin/bash"]

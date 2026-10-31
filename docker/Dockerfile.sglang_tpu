@@ -7,7 +7,7 @@ RUN git clone --depth 1 https://github.com/sgl-project/sglang-torchtpu.git /work
 COPY prep_sglang_tpu.py /tmp/prep_sglang_tpu.py
 RUN python3 /tmp/prep_sglang_tpu.py
 
-RUN uv pip install --system -c /tmp/tpu_abi_constraints.txt "/workspace/sglang/python[diffusion_tpu,all_tpu,ray,runai]" && uv pip install --system --no-deps /workspace/sglang && python3 -c "import shutil, torch, torch_tpu, jax, sglang, sglang_tpu, av, cv2, diffusers; assert shutil.which('ffmpeg') and shutil.which('ffprobe'); print('SGLANG_TPU_BUILD_OK', torch.__version__, torch_tpu.__version__, jax.__version__)"
+RUN uv pip install --system -c /tmp/tpu_abi_constraints.txt "/workspace/sglang/python[diffusion_tpu,all_tpu,ray,runai]" && uv pip install --system --no-deps /workspace/sglang && python3 -c "import importlib.metadata as md, shutil, torch, torch_tpu, jax, sglang, sglang_tpu, av, cv2, diffusers; assert shutil.which('ffmpeg') and shutil.which('ffprobe'); print('SGLANG_TPU_BUILD_OK', torch.__version__, md.version('torch-tpu'), jax.__version__)"
 
 WORKDIR /workspace
 CMD ["/bin/bash"]
