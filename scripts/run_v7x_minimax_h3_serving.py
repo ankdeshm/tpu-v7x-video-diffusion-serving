@@ -290,10 +290,19 @@ tar --overwrite --keep-directory-symlink -C / -xf /tmp/stack.tar /workspace/mock
 rm -f /tmp/stack.tar
 gcc -shared -fPIC -O2 -o /workspace/metadata_hook.so /workspace/metadata_hook.c -ldl
 grep -q 'metadata.google.internal' /etc/hosts || echo '127.0.0.1 metadata.google.internal' >> /etc/hosts
-pgrep -f mock_metadata.py >/dev/null || (LD_PRELOAD="" nohup python3 /workspace/mock_metadata.py >/workspace/mock_metadata.log 2>&1 &)
-sleep 1
 """
     subprocess.run(["bash", "-lc", setup_sh], check=True)
+    env_clean = {k: v for k, v in os.environ.items() if k != "LD_PRELOAD"}
+    mf = open("/workspace/mock_metadata.log", "w")
+    subprocess.Popen(["python3", "/workspace/mock_metadata.py"], env=env_clean, stdout=mf, stderr=subprocess.STDOUT)
+    for _ in range(20):
+        try:
+            with socket.create_connection(("127.0.0.1", 80), timeout=0.5):
+                log(idx, "mock_metadata.py listening on 127.0.0.1:80")
+                return
+        except OSError:
+            time.sleep(0.25)
+    log(idx, "WARNING: mock_metadata.py port 80 check timed out; check /workspace/mock_metadata.log")
 
 
 def generate_synthetic_keyframes(input_dir: Path) -> dict[str, str]:
@@ -484,8 +493,6 @@ def start_sglang_server(
         "serve",
         "--model-path",
         model_path,
-        "--modality",
-        "video",
         "--host",
         "0.0.0.0",
         "--port",

@@ -208,12 +208,14 @@ tar --overwrite --keep-directory-symlink -C / -xf /tmp/stack.tar /workspace/mock
 rm -f /tmp/stack.tar
 gcc -shared -fPIC -O2 -o /workspace/metadata_hook.so /workspace/metadata_hook.c -ldl
 grep -q 'metadata.google.internal' /etc/hosts || echo '127.0.0.1 metadata.google.internal' >> /etc/hosts
-pgrep -f mock_metadata.py >/dev/null || (LD_PRELOAD="" nohup python3 /workspace/mock_metadata.py >/workspace/mock_metadata.log 2>&1 &)
-sleep 1
 """,
         ],
         check=True,
     )
+    env_clean = {k: v for k, v in os.environ.items() if k != "LD_PRELOAD"}
+    mf = open("/workspace/mock_metadata.log", "w")
+    subprocess.Popen(["python3", "/workspace/mock_metadata.py"], env=env_clean, stdout=mf, stderr=subprocess.STDOUT)
+    time.sleep(1)
 
 
 def ensure_engines(idx: int, need_vllm_omni: bool) -> None:
@@ -319,7 +321,7 @@ def generate_i2v_images(out_dir: Path) -> dict[str, str]:
 
 def kill_servers() -> None:
     subprocess.run(
-        ["bash", "-lc", "pkill -9 -f 'sglang.cli.main' || true; pkill -9 -f 'vllm serve' || true; rm -f /tmp/libtpu_lockfile || true"],
+        ["bash", "-lc", "pkill -9 -f 'sglang serve' || true; pkill -9 -f 'vllm serve' || true; rm -f /tmp/libtpu_lockfile || true"],
         check=False,
     )
     time.sleep(2)
@@ -349,8 +351,6 @@ def start_wan_server(
             "serve",
             "--model-path",
             model_path,
-            "--modality",
-            "video",
             "--host",
             "0.0.0.0",
             "--port",
