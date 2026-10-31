@@ -454,7 +454,7 @@ def kill_sglang_processes() -> None:
         [
             "bash",
             "-lc",
-            "for p in $(pgrep -f 'sglang.cli.main|sglang::|sglang_diffusion|Scheduler'); do [ \"$p\" != \"$$\" ] && kill -9 $p 2>/dev/null || true; done; rm -f /tmp/libtpu_lockfile; sleep 3",
+            "for p in $(pgrep -f 'sglang serve|sglang.cli.main|sglang::|sglang_diffusion|Scheduler'); do [ \"$p\" != \"$$\" ] && kill -9 $p 2>/dev/null || true; done; rm -f /tmp/libtpu_lockfile; sleep 3",
         ],
         check=False,
     )
@@ -480,12 +480,12 @@ def start_sglang_server(
     log_path = Path(f"/workspace/sglang_{config_name}.log")
 
     cmd = [
-        "python3",
-        "-m",
-        "sglang.cli.main",
+        "sglang",
         "serve",
         "--model-path",
         model_path,
+        "--modality",
+        "video",
         "--host",
         "0.0.0.0",
         "--port",
@@ -514,19 +514,20 @@ def start_sglang_server(
     log_f = open(log_path, "w")
     proc = subprocess.Popen(cmd, stdout=log_f, stderr=subprocess.STDOUT, env=env)
 
-    url = f"http://127.0.0.1:{port}/v1/videos"
+    urls = (f"http://127.0.0.1:{port}/health", f"http://127.0.0.1:{port}/v1/videos")
     while time.time() - t0 < ready_timeout_s:
         if proc.poll() is not None:
             tail = log_path.read_text(errors="replace")[-4000:]
             raise RuntimeError(f"sglang [{config_name}] exited early rc={proc.returncode}:\n{tail}")
-        try:
-            with urllib.request.urlopen(url, timeout=5) as resp:
-                if resp.status == 200:
-                    boot_s = round(time.time() - t0, 2)
-                    log(idx, f"Server [{config_name}] READY on :{port} in {boot_s}s!")
-                    return proc, boot_s, log_path
-        except Exception:
-            pass
+        for u in urls:
+            try:
+                with urllib.request.urlopen(u, timeout=5) as resp:
+                    if resp.status == 200:
+                        boot_s = round(time.time() - t0, 2)
+                        log(idx, f"Server [{config_name}] READY on :{port} in {boot_s}s!")
+                        return proc, boot_s, log_path
+            except Exception:
+                pass
         time.sleep(3)
 
     proc.kill()
