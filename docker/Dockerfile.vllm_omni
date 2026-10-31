@@ -1,0 +1,19 @@
+FROM us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/vllm-torchtpu-bench:v0.32.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libgl1 libglib2.0-0 libsndfile1 gcc g++ make git curl netcat-openbsd && rm -rf /var/lib/apt/lists/*
+
+RUN TORCH_BASE_VER=$(python3 -c "import torch; print(torch.__version__.split('+')[0])") && \
+    (uv pip install --system --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://download.pytorch.org/whl/nightly/cpu --no-deps "torchaudio==${TORCH_BASE_VER}" || uv pip install --system --index-url https://download.pytorch.org/whl/cpu --no-deps torchaudio) && \
+    git clone --branch v0.32.0rc1 --depth 1 https://github.com/vllm-project/vllm-omni.git /workspace/vllm-omni
+
+COPY prep_vllm_omni.py /tmp/prep_vllm_omni.py
+RUN python3 /tmp/prep_vllm_omni.py
+
+RUN uv pip install --system "setuptools>=77.0.3,<81.0.0" wheel "setuptools-scm>=8.0" && \
+    VLLM_OMNI_TARGET_DEVICE=cpu VLLM_OMNI_VERSION_OVERRIDE=0.32.0rc1 SETUPTOOLS_SCM_PRETEND_VERSION=0.32.0rc1 \
+    uv pip install --system --no-build-isolation -c /tmp/vllm_omni_constraints.txt /workspace/vllm-omni && \
+    uv pip install --system -c /tmp/vllm_omni_constraints.txt imageio imageio-ffmpeg opencv-python-headless av soundfile diffusers accelerate && \
+    python3 -c "import shutil, torch, torch_tpu, jax, vllm, vllm_torchtpu, vllm_omni; assert shutil.which('ffmpeg'); print('VLLM_OMNI_TPU_BUILD_OK', torch.__version__, torch_tpu.__version__, vllm.__version__)"
+
+WORKDIR /workspace
+CMD ["/bin/bash"]
