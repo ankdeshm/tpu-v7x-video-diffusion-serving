@@ -1,0 +1,13 @@
+steps:
+- name: 'python:3.12-slim'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    pip install --no-cache-dir -q huggingface_hub google-cloud-storage requests && \
+    HF_TOKEN="$$_HF_TOK" python3 stage_all_video_models_gcs.py
+  env:
+  - '_HF_TOK=${_HF_TOK}'
+options:
+  machineType: 'E2_HIGHCPU_32'
+timeout: '3600s'

@@ -1,0 +1,15 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '--network=cloudbuild'
+  - '-f'
+  - 'Dockerfile.sglang_tpu'
+  - '-t'
+  - 'us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/sglang-torchtpu-diffusion:v0.2.0'
+  - '.'
+images:
+- 'us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/sglang-torchtpu-diffusion:v0.2.0'
+options:
+  machineType: 'E2_HIGHCPU_32'
+timeout: '1800s'
