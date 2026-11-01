@@ -1,0 +1,49 @@
+[
+  {
+    "name": "mh3_bf16_u8_pallas",
+    "model_short": "MiniMax-H3 (FL2VA)",
+    "is_fasth3": false,
+    "precision": "BF16",
+    "chips": 4,
+    "num_gpus": 8,
+    "ulysses_degree": 8,
+    "attn_mode": "Pallas FlashAttn + AdaLN-online",
+    "boot_s": 51.4,
+    "workload_label": "768p 16:9 15s i2v (4-step)",
+    "task": "fl2va",
+    "resolved_size": "1344x768",
+    "short_edge": 768,
+    "aspect_ratio": "16:9",
+    "duration_seconds": 15.0,
+    "denoise_steps": 4,
+    "num_inference_steps": 5,
+    "concurrency": 1,
+    "num_requests": 2,
+    "ok_count": 2,
+    "cold_compile_e2e_s": 528.251,
+    "wall_s": 351.45,
+    "mean_e2e_s": 175.724,
+    "median_e2e_s": 175.724,
+    "mean_inference_s": 172.76,
+    "ms_per_denoise_step": 43190.0,
+    "rpm_videos_per_min": 0.341,
+    "video_sec_per_wall_sec": 0.085,
+    "peak_memory_mb": 96660.96337890625,
+    "sample_mp4_bytes": 9684300,
+    "ffprobe_streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1344,
+        "height": 768
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "sample_rate": "32000",
+        "channels": 2
+      }
+    ],
+    "error": null
+  }
+]

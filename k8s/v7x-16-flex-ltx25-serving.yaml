@@ -53,8 +53,10 @@ spec:
         - -lc
         - |
           set -euo pipefail
+          ulimit -c 0 || true
           mount -o remount,size=850G /dev/shm || true
-          rm -rf /dev/shm/MiniMax-H3 /dev/shm/outputs /dev/shm/ltx25_outputs || true
+          rm -rf /dev/shm/MiniMax-H3 /dev/shm/FastH3 /dev/shm/FastVideo /dev/shm/hf_cache /dev/shm/sglang_out_* /dev/shm/sglang_xla_cache /dev/shm/sglang_diffusion_cache /dev/shm/outputs /dev/shm/ltx25_outputs /dev/shm/smoke_out /workspace/core* || true
+          df -h /dev/shm
           TOK=$(curl -sS -H "Metadata-Flavor: Google" "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
           curl -fsSL -H "Authorization: Bearer ${TOK}" \
             "https://storage.googleapis.com/storage/v1/b/ank-usc1-bucket-314837540096/o/video-serving-scripts%2Frun_v7x_ltx25_serving.py?alt=media" \
@@ -65,6 +67,7 @@ spec:
         resources:
           requests:
             google.com/tpu: "4"
+            memory: "700Gi"
           limits:
             google.com/tpu: "4"
         volumeMounts:

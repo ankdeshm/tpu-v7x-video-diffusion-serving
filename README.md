@@ -65,3 +65,28 @@ kubectl --context=gke_diesel-patrol-382622_us-central1_ank-tpu-v7x apply -f k8s/
 # 4. Run Priority #3: Wan 2.2 A14B (I2V & T2V) on steady Flex v7x-16
 kubectl --context=gke_diesel-patrol-382622_us-central1_ank-tpu-v7x apply -f k8s/v7x-16-flex-wan22-serving.yaml
 ```
+
+---
+
+## 4. Benchmark Results & 30-RPM Sizing Summary
+
+Full exhaustive benchmark report with 109 individual evaluations across MiniMax-H3, LTX-2.5, and Wan 2.2 is available in **[BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md)**.
+
+### Highlights:
+
+| Model | Architecture | Workload | Single-Host (4 chips) | 16-Chip Slice (DP=4) | Slices for 30 RPM | Hosts (Chips) for 30 RPM |
+|---|---|---|---|---|---|---|
+| **LTX-2.5** | FP8 All-HBM | 544p (960x544) 5s 121f ($c=8$) | 2.563 RPM | **10.019 RPM** | 3 slices | 12 hosts (48 chips) |
+| **LTX-2.5** | FP8 All-HBM | 720p (1280x720) 5s 121f ($c=8$) | 2.045 RPM | **9.288 RPM** | 4 slices | 16 hosts (64 chips) |
+| **LTX-2.5** | FP8 All-HBM | **1080p Kling-V4 Proxy 20s 481f** ($c=8$) | 0.371 RPM | **1.494 RPM** (0.498x RTF) | 21 slices | 84 hosts (336 chips) |
+| **Wan 2.2 T2V** | FP8 All-HBM | 480p (832x480) 5s 81f (4-step fast) | **3.387 RPM** | **13.548 RPM** | 3 slices | 12 hosts (48 chips) |
+| **Wan 2.2 I2V** | FP8 All-HBM | 480p (832x480) 5s 81f (4-step fast, $c=8$) | 2.640 RPM | **10.633 RPM** | 3 slices | 12 hosts (48 chips) |
+| **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 5s 81f (4-step fast, $c=8$) | 1.105 RPM | **4.431 RPM** | 7 slices | 28 hosts (112 chips) |
+| **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 5s 81f (20-step, $c=4$) | 0.311 RPM | **1.243 RPM** | 25 slices | 100 hosts (400 chips) |
+| **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 10s 161f (20-step, $c=4$) | 0.118 RPM | **0.473 RPM** | 64 slices | 256 hosts (1,024 chips) |
+| **MiniMax-H3** | FP8 | 768p (1344x768) 15s (4-step VSA) | **0.342 RPM** | **1.368 RPM** | 22 slices | 88 hosts (352 chips) |
+
+### Key Takeaways:
+1. **Linear Multi-Host Scaling:** SGLang DP=4 on TPU v7x-16 scales with near 100% linear efficiency (4.02x scale factor on LTX-2.5 Kling-V4 proxy, 4.03x on Wan 2.2).
+2. **All-HBM-Resident FP8:** 96 GiB HBM3e per TensorCore eliminates CPU host offload bottlenecks, providing a +47% to +54% throughput boost.
+3. **Collective Communication Standardization:** Global `dist.group.WORLD` sequence parallelism (`Ulysses=8`) is rock-solid on TPU PJRT, while subgroup collectives (`dist.new_group` in CFG=2) trigger PJRT collective deadlocks.
