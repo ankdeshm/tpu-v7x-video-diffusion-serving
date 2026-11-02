@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Priority #1: MiniMax-H3 & FastH3 (4-step VSA Distilled) Video+Audio Serving Benchmark Suite on TPU v7x.
+"""MiniMax-H3 & FastH3 (4-step VSA Distilled) Video+Audio Serving Benchmark Suite on TPU v7x.
 
 Runs across the 4 steady Flex TPU v7x hosts (`tpu-v7x-16-pool`, 4 chips / 8 TensorCores / 768 GB HBM per host =
 16 physical v7x chips / 32 TensorCores / 3,072 GB HBM slice-wide):
@@ -1430,7 +1430,7 @@ def format_markdown_summary(
     cluster_rows: list[dict[str, Any]],
 ) -> str:
     lines = [
-        f"# Priority #1 — MiniMax-H3 & FastH3 Video+Audio Serving on TPU v7x (`{run_id}`)",
+        f"# MiniMax-H3 & FastH3 Video+Audio Serving on TPU v7x (`{run_id}`)",
         "",
         f"- **Updated (UTC):** `{utc_now()}`",
         "- **Cluster / Nodepool:** `tpu-v7x-cluster` / `tpu-v7x-16-pool` (Steady Flex `v7x-16`, `4` hosts × `4` physical `v7x` chips = `16` physical chips / `32` TensorCores / `3,072 GiB` HBM3e)",

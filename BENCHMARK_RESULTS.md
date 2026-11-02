@@ -1,56 +1,52 @@
-# TPU v7x-16 (Ironwood) Video + Audio Diffusion Serving Benchmark
-## Production Multi-Host Performance Report & 30-RPM Sizing Analysis
+# TPU v7x-16 Video + Audio Diffusion Serving Benchmark
 
-**Evaluation Environment:** Cluster 2 (`gke_YOUR_GCP_PROJECT_ID_us-central1_tpu-v7x-cluster`), Nodepool `tpu-v7x-16-pool`  
-**Hardware Topology:** 4 Flex Hosts $\times$ 4 `v7x` Chips = 16 Chips / 32 TensorCores (3,072 GiB HBM3e aggregate, 96 GiB/core)  
-**Serving Engine:** SGLang-TorchTPU runtime with Pallas FlashAttention, Online FP8 MXU Quantization, and Sequence Parallelism (Ulysses=8)  
-**Target Workloads:** MiniMax-H3 FL2VA, Lightricks LTX-2.5-Diffusers (incl. Kling-V4 1080p 20s Proxy), and Wan 2.2 A14B (T2V & I2V)  
-
----
-
-## 1. Executive Summary & Hardware Topology
-
-The Google Cloud TPU `v7x-16` (*Ironwood*) platform introduces next-generation AI acceleration specifically designed for high-compute, memory-intensive generative video diffusion. Each TPU v7x chip provides 2 TensorCores and 192 GiB of high-bandwidth HBM3e (96 GiB per TensorCore), paired with ultra-low-latency 1.6 TB/s Inter-Core Interconnect (ICI) structured in a 4D torus topology.
-
-Across this evaluation on Cluster 2, a complete 16-chip Flex slice (4 hosts, 16 chips, 32 TensorCores, 3,072 GiB HBM3e) was evaluated across three premier video generation architectures:
-1. **MiniMax-H3 (FL2VA & FastH3 4-Step VSA):** Evaluating fast video sampling architectures and AdaLN caching mechanisms under BF16 and FP8.
-2. **Lightricks LTX-2.5-Diffusers & Kling-V4 Proxy:** Evaluating fast 544p/720p/1080p video generation, two-stage VAE spatial decoding, and long-sequence (20-second, 481 frames at 1920x1088) production video synthesis as an exact proxy for Kling-V4.
-3. **Wan 2.2 A14B (Text-to-Video & Image-to-Video):** Evaluating hybrid video diffusion across 480p, 720p, 10-second (161 frames), and portrait formats, single-host vs 2-chip subhost scaling, and full-slice DP=4 cluster execution.
-
-### Key Architectural Findings:
-- **Linear Multi-Host Scaling (DP=4):** On the full 16-chip slice (4 hosts), SGLang DP=4 demonstrated near-perfect linear throughput scaling:
-  - **LTX-2.5 1080p 20s Kling Proxy:** Scaled from **0.371 RPM** (single host) to **1.494 RPM** (4-host slice), a **4.02x scale factor** (100% parallel efficiency).
-  - **Wan 2.2 I2V 480p 4-Step:** Scaled from **2.640 RPM** (single host) to **10.633 RPM** (4-host slice), a **4.03x scale factor**.
-  - **Wan 2.2 I2V 720p 20-Step:** Scaled from **0.311 RPM** (single host) to **1.243 RPM** (4-host slice), an exact **4.00x scale factor**.
-- **All-HBM-Resident FP8 Acceleration:** Leveraging 96 GiB HBM3e per TensorCore allows the full 14B model weights, DiT parameters, T5 text encoder, and VAE encoder/decoder to reside permanently in HBM without CPU host offload or layerwise paging. FP8 online quantization on TPU MXUs delivered a **+47% RPM increase** over BF16 in LTX-2.5 and a **+54% RPM increase** in Wan 2.2 4-step fast generation.
-- **PJRT Collective Communication Constraints:** Global collective operations across `dist.group.WORLD` (such as Ulysses=8 across 8 cores or 2-chip Ulysses=4 across 4 cores) execute with zero host-device sync stalls and 100% reliability. However, multi-branch subgroup communication (`dist.new_group` used in CFG=2) triggers collective deadlocks on TPU PJRT, establishing Ulysses=8 as the definitive, production-hardened sequence parallelism standard for TPU v7x.
+- **Evaluation Environment:** `gke_YOUR_GCP_PROJECT_ID_us-central1_tpu-v7x-cluster`, Nodepool `tpu-v7x-16-pool`
+- **Hardware Topology:** 4 hosts × 4 `v7x` chips = 16 chips / 32 TensorCores (`3,072 GiB` HBM3e aggregate, `96 GiB`/TensorCore)
+- **Serving Engine:** `sglang-torchtpu` with Pallas FlashAttention, online FP8 quantization, and Ulysses sequence parallelism (`Ulysses=8`)
+- **Evaluated Models:** `MiniMax-H3` (`FL2VA`), `Lightricks/LTX-2.5` (including `1080p` 20s 481-frame workload), and `Wan 2.2 A14B` (`T2V` & `I2V`)
 
 ---
 
-## 2. Priority #1: MiniMax-H3 FL2VA & FastH3 4-Step VSA Benchmark Results
+## 1. Executive Summary
 
-MiniMax-H3 features a fast 4-step video sampling architecture (VSA) for high-resolution Image-to-Video generation (768p 16:9, 15 seconds, 4 steps). Benchmarking compared BF16 Pallas FlashAttention, FP8 MXU acceleration, and stock SDPA with AdaLN host caching.
+Each TPU `v7x` chip provides 2 TensorCores and `192 GiB` HBM3e (`96 GiB` per TensorCore). Across a 16-chip `2x2x4` slice (4 hosts, 32 TensorCores), we evaluated serving latency, single-host vs. multi-host throughput, and 30-RPM capacity sizing for three video generation models:
 
-| Model | Configuration | Engine | Precision | Workload | Steps | Cold Compile | Median E2E | Inference | ms/step | RPM | Peak HBM | Status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| None | `None` | None | BF16 | None | None | - | - | 172.76s | - | 0.0 | 94.40 GB | None |
-| None | `None` | None | FP8 (online) | None | None | - | - | 172.261s | - | 0.0 | 86.82 GB | None |
-| None | `None` | None | BF16 | None | None | - | - | 174.543s | - | 0.0 | 94.31 GB | None |
+1. **`MiniMax-H3` (`FL2VA`):** 15-second `768p` (`1344×768`) 4-step image-to-video + stereo audio generation comparing BF16 Pallas FlashAttention, online FP8 quantization, and stock SDPA.
+2. **`Lightricks/LTX-2.5`:** 544p, 720p, and 1080p video + audio generation, including 20-second (`481`-frame) `1920×1088` synthesis with fast and two-stage tiled VAE decoding.
+3. **`Wan 2.2 A14B` (`T2V` & `I2V`):** Text-to-Video and Image-to-Video synthesis across 480p, 720p, 10-second (`161`-frame), and `720×1280` portrait formats.
 
-### MiniMax-H3 Key Takeaways:
-- **FP8 Cold Compilation Advantage:** FP8 online quantization reduced cold compilation and initial graph lowering time by **58.7%** (from 528.25s to 217.94s).
-- **HBM Footprint:** FP8 All-HBM residency lowered peak memory allocation from 96.66 GB to 88.90 GB per chip, easily fitting within the 96 GiB TensorCore boundary.
-- **Fast 4-Step Latency:** End-to-end 15-second 768p video generation finished in **175.51s** median (inference latency 172.26s, 43,065 ms/step), achieving **0.342 RPM** on a single 4-chip host.
+### Key Findings
+- **Linear Multi-Host Data Parallelism (`DP=4`):** Scaling from 1 host (4 chips) to 4 hosts (16 chips) scaled throughput linearly (`4.00×–4.03×`):
+  - **`LTX-2.5` `1080p` 20s (`481f`):** Improved from `0.371 RPM` (1 host) to `1.494 RPM` (4 hosts, `4.02×`).
+  - **`Wan 2.2 I2V` `480p` 4-step:** Improved from `2.640 RPM` (1 host) to `10.633 RPM` (4 hosts, `4.03×`).
+  - **`Wan 2.2 I2V` `720p` 20-step:** Improved from `0.311 RPM` (1 host) to `1.243 RPM` (4 hosts, `4.00×`).
+- **All-HBM-Resident FP8 vs. BF16 / CPU Offload:** Keeping DiT weights, text encoders, and VAEs resident in HBM (`--dit-cpu-offload=false`) with online FP8 quantization improved single-host throughput from `1.744 RPM` (BF16) and `1.329 RPM` (FP8 with CPU offload) to `2.563 RPM` (`+47%` over BF16) on `LTX-2.5` `544p`, and from `2.198 RPM` (BF16) to `3.387 RPM` (`+54%`) on `Wan 2.2 T2V` `480p` 4-step.
+- **PJRT Collective Group Compatibility:** Collectives over `dist.group.WORLD` (`Ulysses=8` across 8 TensorCores or `Ulysses=4` across 4 TensorCores) run reliably without stalls, whereas partitioned subgroups (`dist.new_group` in `CFG=2 × U=4`) deadlock in PJRT on `Wan 2.2`. Standardizing on `Ulysses=8` avoids subgroup collective deadlocks.
 
 ---
 
-## 3. Priority #2: Lightricks LTX-2.5-Diffusers & Kling-V4 Proxy Results
+## 2. MiniMax-H3 (FL2VA) Benchmark Results
 
-Lightricks LTX-2.5 was evaluated comprehensively across single-host configurations (BF16 vs FP8 All-HBM-Resident, 2-chip subhost scaling) and the full 16-chip DP=4 cluster slice.
+`MiniMax-H3` (`33.14B` omni-modal video + stereo-audio DiT) was evaluated on single 4-chip `v7x` hosts (`Ulysses=8` across 8 TensorCores) for `768p` (`1344×768`, 16:9) 15-second 4-step image-to-video + audio (`fl2va`) generation (`num_inference_steps=5`, `concurrency=1`). Raw per-pod metrics are archived in [`results/v7x_flex_minimax_h3_serve_p1/`](./results/v7x_flex_minimax_h3_serve_p1/).
 
-The benchmark specifically evaluated the **Kling-V4 Proxy** workload: **1080p (1920x1088), 20 seconds, 481 frames**, utilizing both fast VAE decoding and high-fidelity Two-Stage VAE spatial tiled decoding.
+| Model | Configuration | Engine | Precision | Attention & Offload Mode | Workload | Denoise Steps | Cold Compile | Median E2E | Mean Inference | ms/step | Host RPM | Peak HBM | Status |
+|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `MiniMax-H3 (FL2VA)` | `mh3_fp8_u8_pallas` | `sglang-torchtpu` | FP8 (online) | Pallas FlashAttn (Resident DiT, Enc/VAE Offload) | `768p` (`1344×768`) 15s `i2v` | 4 | 217.94s | **175.51s** | 172.26s | 43,065.2 | **0.342** | 86.82 GiB | OK (2/2) |
+| `MiniMax-H3 (FL2VA)` | `mh3_bf16_u8_pallas` | `sglang-torchtpu` | BF16 | Pallas FlashAttn + AdaLN-online | `768p` (`1344×768`) 15s `i2v` | 4 | 528.25s | **175.72s** | 172.76s | 43,190.0 | **0.341** | 94.40 GiB | OK (2/2) |
+| `MiniMax-H3 (FL2VA)` | `mh3_bf16_u8_sdpa_adaln` | `sglang-torchtpu` | BF16 | Stock SDPA + AdaLN-online | `768p` (`1344×768`) 15s `i2v` | 4 | 526.47s | **178.00s** | 174.54s | 43,635.8 | **0.337** | 94.31 GiB | OK (2/2) |
 
-### Single-Host 4-Chip & 2-Chip Scaling Matrix
+### MiniMax-H3 Summary
+- **Cold Compilation Time:** Online FP8 quantization reduced cold XLA compilation and first-request latency from `528.25s` (BF16) to `217.94s` (`-58.7%`).
+- **Memory Headroom:** FP8 reduced peak HBM per TensorCore from `94.40 GiB` (`96.66 GB`) to `86.82 GiB` (`88.90 GB`), providing `~9.2 GiB` of safety margin under the `96 GiB` TensorCore limit.
+- **Steady-State Latency:** Warm end-to-end 15-second `1344×768` video + 32 kHz stereo AAC generation improved from `178.00s` (stock SDPA, `0.337 RPM`) to `175.51s` (FP8 + Pallas FlashAttention, `0.342 RPM` per host, scaling to `1.368 RPM` across a 4-host `v7x-16` slice).
+
+---
+
+## 3. Lightricks LTX-2.5 Benchmark Results
+
+Lightricks `LTX-2.5` (`22B` video + audio DiT) was evaluated across single-host configurations (BF16 vs. FP8 All-HBM, CPU offload, stock SDPA, and 2-chip sub-host `Ulysses=4`) and the full 16-chip `DP=4` slice, including `1080p` (`1920×1088`) 20-second `481`-frame generation (`Kling-V4` proxy) with fast and two-stage tiled VAE decoding.
+
+### 3.1 Single-Host (4-Chip & 2-Chip) Results
 
 | Configuration | Chips | Precision | Workload | Steps | Cold Compile | Median E2E | ms/step | RPM | RTF | Peak HBM |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -99,7 +95,7 @@ The benchmark specifically evaluated the **Kling-V4 Proxy** workload: **1080p (1
 | `sglang_bf16_u8_sdpa` | 4 | BF16 | 720p (1280x704) 5s 121f T2VA (8-step distill) | 8 | 42.196s | 36.469s | 4,228.1 | **1.645** | 0.137x | 62.48 GB |
 | `sglang_bf16_u8_sdpa` | 4 | BF16 | 1080p Kling-V4 Proxy (1920x1088) 20s 481f (VAE fast) | 8 | 235.197s | 174.269s | 19,874.5 | **0.344** | 0.115x | 93.52 GB |
 
-### Full 16-Chip Slice DP=4 Cluster Throughput Sweep (FP8 All-HBM-Resident)
+### 3.2 Full 16-Chip Slice (`DP=4`) Throughput Sweep (FP8 All-HBM)
 
 | Cluster Configuration | Workload | Concurrency | Wall Time | Median E2E | P90 E2E | Slice RPM | Real-Time Factor (RTF) | Success Rate |
 |---|---|---|---|---|---|---|---|---|
@@ -111,18 +107,18 @@ The benchmark specifically evaluated the **Kling-V4 Proxy** workload: **1080p (1
 | DP=4 × Ulysses=8 (16 v7x chips, FP8, All-HBM-Resident) | 1080p Kling-V4 Proxy (1920x1088) 20s 481f (VAE fast) | $c=8$ | 482.0s | 319.718s | 321.061s | **1.494** | **0.498x** | 12/12 |
 | DP=4 × Ulysses=8 (16 v7x chips, FP8, All-HBM-Resident) | 1080p Kling-V4 Proxy (1920x1088) 20s 481f (Stage2 VAE decode) | $c=4$ | 160.484s | 160.435s | 160.482s | **1.495** | **0.498x** | 4/4 |
 
-### LTX-2.5 & Kling-V4 Proxy Highlights:
-- **Kling-V4 1080p 20s Proxy Performance:** Single host completed the 20-second 481-frame 1080p video in **161.40s** (0.372 RPM). On the full 16-chip slice (DP=4), aggregate throughput reached **1.494 RPM** (4.02x scale factor) with a Real-Time Factor of **0.498x** (generating 20 seconds of video in ~40 seconds of effective wall-clock time per slice).
-- **Two-Stage VAE Overhead:** Comparing Fast VAE decoding vs Two-Stage spatial tiled VAE decoding revealed that the two-stage decoder adds less than **0.5s** of total wall-clock time on TPU v7x (161.40s vs 161.90s), proving that high-fidelity spatial tiled decoding has zero practical penalty on TPU v7x.
-- **Short-Form Video Generation:** For 5-second 544p video synthesis (121 frames), single-host FP8 achieved **2.563 RPM** (23.58s median), scaling to **10.019 RPM** on the 16-chip DP=4 cluster ($c=8$).
+### LTX-2.5 Summary
+- **1080p 20s (`481f`) Synthesis:** Single-host latency improved from `182.55s` (FP8 with CPU offload) and `174.08s` (BF16) to `161.40s` (`0.372 RPM`) in FP8 All-HBM mode, scaling to `1.494 RPM` (`0.498x` RTF) across the 4-host `v7x-16` slice (`DP=4`).
+- **Two-Stage Tiled VAE Decoding:** Two-stage spatial tiled VAE decoding added `<0.5s` wall-clock difference compared to fast VAE decoding (`161.40s` vs `161.90s`).
+- **Short-Form 544p 5s (`121f`) Synthesis:** Single-host latency improved from `34.21s` (`1.744 RPM`, BF16) to `23.58s` (`2.563 RPM`, FP8 All-HBM), scaling to `10.019 RPM` at `DP=4` ($c=8$).
 
 ---
 
-## 4. Priority #3: Wan 2.2 A14B (T2V & I2V) Benchmark Results
+## 4. Wan 2.2 A14B (T2V & I2V) Benchmark Results
 
-Wan 2.2 A14B is a 14-billion parameter hybrid video diffusion model. Benchmarks evaluated both Text-to-Video (T2V) and Image-to-Video (I2V) conditioning across 480p, 720p, 10-second sequences (161 frames), and 720x1280 portrait orientation.
+`Wan 2.2 A14B` (`14B` active two-stage video diffusion model) was evaluated for both Text-to-Video (`T2V`) and Image-to-Video (`I2V`) conditioning across `480p`, `720p`, 10-second (`161`-frame) sequences, and `720×1280` portrait orientation.
 
-### Single-Host 4-Chip & 2-Chip Architectural Sweep Matrix
+### 4.1 Single-Host (4-Chip & 2-Chip) Results
 
 | Configuration | Chips | Task | Precision | Workload | Steps | Cold Compile | Median E2E | ms/step | RPM | RTF | Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -175,7 +171,7 @@ Wan 2.2 A14B is a 14-billion parameter hybrid video diffusion model. Benchmarks 
 | `wan22_t2v_bf16_u8_sdpa` | 4 | T2V | BF16 | 480p (832x480) 5s 81f (4-step fast) | 4 | 0.501s | - | - | **0.0** | 0.0x | Failed (Subgroup deadlock) |
 | `wan22_t2v_bf16_u8_sdpa` | 4 | T2V | BF16 | 720p (1280x720) 5s 81f (20-step) | 20 | 0.501s | - | - | **0.0** | 0.0x | Failed (Subgroup deadlock) |
 
-### Full 16-Chip Slice DP=4 Cluster Throughput Sweep (Wan 2.2 I2V FP8 All-HBM)
+### 4.2 Full 16-Chip Slice (`DP=4`) Throughput Sweep (`Wan 2.2 I2V` FP8 All-HBM)
 
 | Cluster Configuration | Workload | Concurrency | Wall Time | Median E2E | P90 E2E | Slice RPM | Real-Time Factor (RTF) | Success Rate |
 |---|---|---|---|---|---|---|---|---|
@@ -187,41 +183,38 @@ Wan 2.2 A14B is a 14-billion parameter hybrid video diffusion model. Benchmarks 
 | DP=4 × Ulysses=8 (16 v7x chips, FP8, All-HBM-Resident) | 720p (1280x720) 5s 81f I2V (20-step) | $c=8$ | 386.383s | 289.541s | 386.38s | **1.242** | **0.104x** | 8/8 |
 | DP=4 × Ulysses=8 (16 v7x chips, FP8, All-HBM-Resident) | 720p (1280x720) 10s 161f I2V (20-step) | $c=4$ | 507.112s | 506.647s | 507.111s | **0.473** | **0.079x** | 4/4 |
 
-### Wan 2.2 Key Takeaways:
-- **Extreme 4-Step Generation:** In 4-step fast mode, Wan 2.2 T2V achieved **17.55s** median latency (**3.387 RPM**) on a single host. In I2V mode, 4-step fast generation achieved **22.56s** median latency (**2.640 RPM**).
-- **Cluster Linear Scaling:** On the 16-chip DP=4 slice, 480p 4-step I2V delivered **10.633 RPM**, 720p 4-step delivered **4.431 RPM**, and 720p 20-step delivered **1.243 RPM**, all achieving exact **4.0x linear speedup** across the 4 hosts.
-- **10-Second Video Synthesis:** 720p 10-second (161 frames) video generation executed in **481.54s** median on single host and **506.65s** at cluster concurrency $c=4$, delivering sustained **0.473 RPM** on the 16-chip slice.
-- **Subhost 2-Chip Scaling:** Running Wan 2.2 across 2 chips (4 TensorCores) delivered **22.05s** (2.721 RPM) on 480p 4-step and **57.38s** (1.046 RPM) on 720p 4-step, demonstrating exceptional compute density for smaller multi-tenant deployments.
+### Wan 2.2 Summary
+- **4-Step Fast Mode:** Single-host latency improved from `31.68s` (`2.198 RPM`, BF16) to `17.55s` (`3.387 RPM`, FP8 All-HBM) on `480p` T2V, and from `37.34s` (`1.835 RPM`, BF16) to `22.56s` (`2.640 RPM`, FP8 All-HBM) on `480p` I2V.
+- **Multi-Host Scaling (`DP=4`):** Across the 16-chip slice, `480p` 4-step I2V reached `10.633 RPM`, `720p` 4-step reached `4.431 RPM`, and `720p` 20-step reached `1.243 RPM` (`4.0×` single-host throughput).
+- **10-Second (`161f`) Synthesis:** `720p` 10-second I2V completed in `506.59s` median on 1 host and `506.65s` at slice concurrency $c=4$ (`0.473 RPM`).
+- **2-Chip Sub-Host Deployment:** Running `Wan 2.2 T2V` across 2 chips (4 TensorCores, `Ulysses=4`) completed `480p` 4-step in `22.05s` (`2.721 RPM`) and `720p` 4-step in `57.38s` (`1.046 RPM`).
 
 ---
 
-## 5. Technical Deep Dive: Architectural Discoveries & Fixes
+## 5. Runtime Fixes & Architecture Notes
 
-### 1. Wan 2.2 VAE Spatial Parallel Conv Halo-Exchange Mismatch
-- **Symptom:** During initial I2V warmup, the server aborted with:
-  `RuntimeError: PjRtBuffer::CopyToRemoteDevice: INVALID_ARGUMENT: Remote size 32256 is not identical to local size 1032192` in `parallel_conv.py:344`.
-- **Root Cause:** By default, Wan VAE configuration specifies `use_parallel_encode: bool = True` in `WanVAEConfig`. In SGLang, `WanEncoder3d` instantiated `SpatialParallelConv2d` and `SpatialParallelCausalConv3d`, attempting P2P halo exchange across TPU devices using `dist.batch_isend_irecv`. On TPU with PJRT, mismatched spatial slice sizes between halo padding and causal temporal conv buffers triggered buffer size mismatch errors in the PJRT device copy layer.
-- **Resolution:** Implemented runtime patches in `parallel_conv.py` to bypass spatial halo exchange on TPU (`conv_forward(x)` directly) and explicitly set `use_parallel_encode = False` in `wanvae.py`. This allowed the image conditioning encoder to run locally on each TensorCore without inter-chip communication, completely resolving the crash.
+### 5.1 Wan 2.2 VAE Spatial Parallel Conv Halo-Exchange Fix
+- **Issue:** During initial I2V warmup, the server failed with `RuntimeError: PjRtBuffer::CopyToRemoteDevice: INVALID_ARGUMENT: Remote size 32256 is not identical to local size 1032192` in `parallel_conv.py:344`.
+- **Cause:** `WanVAEConfig` defaults to `use_parallel_encode = True`, causing `WanEncoder3d` to run P2P halo exchange via `dist.batch_isend_irecv` across TPU devices with mismatched causal temporal padding sizes.
+- **Fix:** Bypassed spatial halo exchange on TPU in `parallel_conv.py` and set `use_parallel_encode = False` in `wanvae.py` so image conditioning runs locally per TensorCore.
 
-### 2. Distributed Subgroup Collectives vs Global World Group on PJRT
-- **Observation:** Both `wan22_t2v_fp8_cfg2_u4_all_hbm` and `wan22_i2v_fp8_cfg2_u4_all_hbm` hung during warmup denoising, whereas all `Ulysses=8` (8-core) and `2-Chip Ulysses=4` (4-core) configurations executed with 100% reliability.
-- **Root Cause:** Diagnostic profiling via `py-spy` revealed that the schedulers were blocked at `run_two_branch_cfg_parallel` calling `get_cfg_group().broadcast(p, src=0)`. PyTorch/XLA PJRT natively supports collective operations (e.g. `all_to_all`, `all_reduce`, `broadcast`) when executed on `dist.group.WORLD`. However, when communication groups are partitioned into subgroups (`dist.new_group`) for multi-branch CFG dispatch, the PJRT collective communicator deadlocks because subgroup collective lowering is not supported by PJRT on TPU.
-- **Conclusion:** On TPU v7x, sequence parallelism MUST use `dist.group.WORLD` (Ulysses=8 across 8 cores or Ulysses=4 across 4 dedicated subhost cores). CFG parallel should be avoided in favor of standard sequence-parallel CFG evaluation.
+### 5.2 Global World Collectives vs. Subgroup Collectives on PJRT
+- **Issue:** `wan22_t2v_fp8_cfg2_u4_all_hbm` and `wan22_i2v_fp8_cfg2_u4_all_hbm` stalled during warmup denoising, whereas `Ulysses=8` (8 cores) and 2-chip `Ulysses=4` (4 cores) completed without stalls.
+- **Cause:** Stack inspection showed workers blocked at `get_cfg_group().broadcast(p, src=0)`. PJRT supports collectives over `dist.group.WORLD` (`all_to_all`, `all_reduce`, `broadcast`), whereas partitioned subgroups (`dist.new_group` for 2-branch CFG) deadlock.
+- **Fix:** Use `dist.group.WORLD` sequence parallelism (`Ulysses=8` on 4 chips or `Ulysses=4` on 2 isolated chips) rather than `CFG=2` subgroup parallelism.
 
-### 3. LTX-2.5 Dynamic Boolean Mask NaN Suppression
-- **Root Cause:** XLA graph lowering on TPU v7x encountered dynamic boolean mask validation failures in `text_connector.py`, producing NaNs during prompt embedding projection.
-- **Resolution:** Shifted connector projection execution to CPU and transferred resulting conditioning tensors to TPU, preventing XLA graph invalidation while maintaining 100% numerical fidelity.
+### 5.3 LTX-2.5 Dynamic Boolean Mask Handling
+- **Cause:** XLA lowering on TPU encountered dynamic boolean mask issues in `text_connector.py`, producing NaNs during prompt projection.
+- **Fix:** Executed connector projection on CPU and transferred conditioning tensors to TPU, preserving numerical accuracy without XLA graph invalidation.
 
 ---
 
-## 6. Comprehensive 30-RPM Sizing & Capacity Planning
-
-To support enterprise production workloads at a sustained **30 Requests Per Minute (RPM)**, the following table details the required hardware capacity for each model and workload configuration.
+## 6. Capacity Sizing for 30 RPM
 
 > [!NOTE]
-> Sizing is calculated strictly from verified slice and single-host throughput numbers. Each Flex Host contains 4 TPU v7x chips (8 TensorCores). A full 16-chip slice comprises 4 hosts. Sizing columns report Host and Chip counts exclusively; no financial/cost data is included.
+> Sizing is computed from measured slice and single-host throughput. Each `v7x` host contains 4 chips (8 TensorCores), and one `v7x-16` slice contains 4 hosts (16 chips / 32 TensorCores).
 
-| Model | Precision | Workload Resolution & Length | Target RPM | Baseline RPM / Slice (16 chips) | Slices Required | Flex Hosts Required | TPU v7x Chips Required | TensorCores Required |
+| Model | Precision | Workload Resolution & Length | Target RPM | Measured RPM / Slice (16 chips) | Slices Required | Hosts Required | `v7x` Chips Required | TensorCores Required |
 |---|---|---|---|---|---|---|---|---|
 | **LTX-2.5** | FP8 All-HBM | 544p (960x544) 5s 121f (c=8) | 30 RPM | 10.019 RPM | **3** | **12** | **48** | **96** |
 | **LTX-2.5** | FP8 All-HBM | 720p (1280x720) 5s 121f (c=8) | 30 RPM | 9.288 RPM | **4** | **16** | **64** | **128** |
@@ -233,17 +226,17 @@ To support enterprise production workloads at a sustained **30 Requests Per Minu
 | **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 5s 81f (4-step fast, c=8) | 30 RPM | 4.431 RPM | **7** | **28** | **112** | **224** |
 | **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 5s 81f (20-step, c=4) | 30 RPM | 1.243 RPM | **25** | **100** | **400** | **800** |
 | **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 10s 161f (20-step, c=4) | 30 RPM | 0.473 RPM | **64** | **256** | **1024** | **2048** |
-| **MiniMax-H3** | FP8 | 768p (1344x768) 15s (4-step VSA) | 30 RPM | 1.368 RPM | **22** | **88** | **352** | **704** |
-| **MiniMax-H3** | BF16 | 768p (1344x768) 15s (4-step VSA) | 30 RPM | 1.364 RPM | **22** | **88** | **352** | **704** |
+| **MiniMax-H3** | FP8 | 768p (1344x768) 15s (4-step) | 30 RPM | 1.368 RPM | **22** | **88** | **352** | **704** |
+| **MiniMax-H3** | BF16 | 768p (1344x768) 15s (4-step) | 30 RPM | 1.364 RPM | **22** | **88** | **352** | **704** |
 
 ---
 
-## 7. Conclusions & Recommended Production Architectures
+## 7. Deployment Recommendations
 
-1. **Standardize on Ulysses=8 Sequence Parallelism:** Ulysses sequence parallelism utilizing global `dist.group.WORLD` collectives is the optimal parallelization strategy for video DiTs on TPU v7x, achieving 100% parallel efficiency across multi-host TPU slices.
-2. **Leverage FP8 All-HBM-Resident Deployment:** With 96 GiB HBM3e per core, all video diffusion pipelines (including 14B models with text encoders and VAEs) should be deployed in FP8 All-HBM mode. This completely eliminates CPU host offload bottlenecks and unlocks a 40–50% throughput gain.
-3. **Capacity Allocation for 30 RPM:**
-   - For fast short-form video generation (Wan 2.2 4-step fast or LTX-2.5 544p), **3 slices (12 hosts / 48 chips)** deliver over 30 RPM.
-   - For high-definition 720p 20-step production serving, **25 slices (100 hosts / 400 chips)** sustain 30 RPM.
-   - For flagship **1080p 20s 481-frame Kling-V4 proxy serving**, **21 slices (84 hosts / 336 chips)** sustain 30 RPM with a 0.498x Real-Time Factor.
+1. **Sequence Parallelism (`Ulysses=8`):** Use `dist.group.WORLD` Ulysses sequence parallelism across all 8 TensorCores on a 4-chip host, scaling horizontally with data-parallel host replicas (`DP=4` per 16-chip slice).
+2. **All-HBM FP8 Residency:** With `96 GiB` HBM3e per TensorCore, keep DiT weights, text encoders, and VAEs resident in HBM (`--dit-cpu-offload=false`, `--quantization fp8`) to avoid host PCIe transfer overhead (`+47%` to `+54%` throughput improvement on 4/8-step workloads).
+3. **Capacity Summary for 30 RPM:**
+   - Short-form fast generation (`Wan 2.2` 4-step `480p` or `LTX-2.5` `544p` 5s): **3 slices (12 hosts / 48 chips)**.
+   - High-resolution 20-step serving (`Wan 2.2` `720p` 5s): **25 slices (100 hosts / 400 chips)**.
+   - Long-duration `1080p` 20s `481`-frame serving (`LTX-2.5`): **21 slices (84 hosts / 336 chips)**, or **22 slices (88 hosts / 352 chips)** for `MiniMax-H3` `768p` 15s.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Priority #2: LTX-2.5 (`Lightricks/LTX-2.5` 22B Video+Audio DiT + Diffusion Decoder) Serving Benchmark Suite on TPU v7x.
+"""LTX-2.5 (`Lightricks/LTX-2.5` 22B Video+Audio DiT + Diffusion Decoder) Serving Benchmark Suite on TPU v7x.
 
 Runs across the 4 steady Flex TPU v7x hosts (`tpu-v7x-16-pool`, 4 chips / 8 TensorCores / 768 GiB HBM per host =
 16 physical v7x chips / 32 TensorCores / 3,072 GiB HBM slice-wide):
@@ -1208,7 +1208,7 @@ def format_markdown_summary(
     cluster_rows: list[dict[str, Any]],
 ) -> str:
     lines = [
-        f"# Priority #2 — LTX-2.5 (22B Video+Audio + Kling-V4 Proxy) Serving on TPU v7x (`{run_id}`)",
+        f"# LTX-2.5 (22B Video+Audio + Kling-V4 Proxy) Serving on TPU v7x (`{run_id}`)",
         "",
         f"- **Updated (UTC):** `{utc_now()}`",
         "- **Cluster / Nodepool:** `tpu-v7x-cluster` / `tpu-v7x-16-pool` (Steady Flex `v7x-16`, `16` physical chips / `32` TensorCores / `3,072 GiB` HBM3e)",

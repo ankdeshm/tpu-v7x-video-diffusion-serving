@@ -10,14 +10,14 @@ PREFIX = "models"
 HF_TOKEN = os.environ.get("HF_TOKEN") or None
 
 TARGETS = [
-    # 1. Priority #1A: MiniMax-H3 FL2VA partition (native SGLang t2va + fl2va i2v 768p 15s!)
+    # 1. Model 1A: MiniMax-H3 FL2VA partition (native SGLang t2va + fl2va i2v 768p 15s)
     ("MiniMaxAI/MiniMax-H3", ("FL2VA/", "model_index.json", "modular_model_index.json")),
-    # 2. Priority #1B: FastH3 4-step VSA distilled MiniMax-H3 + overlay
+    # 2. Model 1B: FastH3 4-step VSA distilled MiniMax-H3 + overlay
     ("kevin-mi/FastH3-4step-Preview-overlay", None),
     ("FastVideo/FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree", None),
-    # 3. Priority #2: Official Lightricks/LTX-2.5-Diffusers
+    # 3. Official Lightricks/LTX-2.5-Diffusers
     ("Lightricks/LTX-2.5-Diffusers", None),
-    # 4. Priority #3B: Wan2.2-I2V-A14B-Diffusers (T2V already staged!)
+    # 4. Model 3B: Wan2.2-I2V-A14B-Diffusers (T2V already staged)
     ("Wan-AI/Wan2.2-I2V-A14B-Diffusers", None),
 ]
 

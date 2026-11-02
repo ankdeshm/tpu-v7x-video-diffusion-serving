@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Priority #3: Wan 2.2 A14B (`Wan2.2-I2V-A14B-Diffusers` & `Wan2.2-T2V-A14B-Diffusers` 28.6B Total / 14.3B Active Two-Stage MoE DiT) Serving Benchmark Suite on TPU v7x.
+"""Wan 2.2 A14B (`Wan2.2-I2V-A14B-Diffusers` & `Wan2.2-T2V-A14B-Diffusers` 28.6B Total / 14.3B Active Two-Stage MoE DiT) Serving Benchmark Suite on TPU v7x.
 
 Runs across the 4 steady Flex TPU v7x hosts (`tpu-v7x-16-pool`, 4 chips / 8 TensorCores / 768 GiB HBM3e per host =
 16 physical v7x chips / 32 TensorCores / 3,072 GiB HBM3e slice-wide):
@@ -892,7 +892,7 @@ def format_markdown_summary(
     cluster_rows: list[dict[str, Any]],
 ) -> str:
     lines = [
-        f"# Priority #3 — Wan 2.2 A14B (I2V-A14B & T2V-A14B MoE DiT) Serving on TPU v7x (`{run_id}`)",
+        f"# Wan 2.2 A14B (I2V-A14B & T2V-A14B MoE DiT) Serving on TPU v7x (`{run_id}`)",
         "",
         f"- **Updated (UTC):** `{utc_now()}`",
         "- **Cluster / Nodepool:** `tpu-v7x-cluster` / `tpu-v7x-16-pool` (Steady Flex `v7x-16`, `16` physical chips / `32` TensorCores / `3,072 GiB` HBM3e)",
