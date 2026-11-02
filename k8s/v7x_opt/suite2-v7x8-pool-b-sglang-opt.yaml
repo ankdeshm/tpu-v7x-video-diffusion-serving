@@ -24,17 +24,17 @@ spec:
       restartPolicy: Never
       serviceAccountName: default
       nodeSelector:
-        cloud.google.com/tpu-worker-node: tpu-v7x-cluster-8-pool-b
-        cloud.google.com/tpu-worker-node: tpu7x
-        cloud.google.com/tpu-worker-node: 2x2x2
+        cloud.google.com/gke-nodepool: tpu-v7x-cluster-8-pool-b
+        cloud.google.com/gke-tpu-accelerator: tpu7x
+        cloud.google.com/gke-tpu-topology: 2x2x2
       tolerations:
       - key: google.com/tpu
         operator: Exists
         effect: NoSchedule
-      - key: cloud.google.com/tpu-worker-node
+      - key: cloud.google.com/gke-spot
         operator: Exists
         effect: NoSchedule
-      - key: cloud.google.com/tpu-worker-node
+      - key: cloud.google.com/gke-queued
         operator: Exists
         effect: NoSchedule
       containers:

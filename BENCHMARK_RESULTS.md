@@ -217,7 +217,7 @@ Lightricks `LTX-2.5` (`22B` video + audio DiT) was evaluated across single-host 
 | Model | Precision | Workload Resolution & Length | Target RPM | Measured RPM / Slice (16 chips) | Slices Required | Hosts Required | `v7x` Chips Required | TensorCores Required |
 |---|---|---|---|---|---|---|---|---|
 | **LTX-2.5** | FP8 All-HBM | 544p (960x544) 5s 121f (c=8) | 30 RPM | 10.019 RPM | **3** | **12** | **48** | **96** |
-| **LTX-2.5** | FP8 All-HBM | 720p (1280x720) 5s 121f (c=8) | 30 RPM | 9.288 RPM | **4** | **16** | **64** | **128** |
+| **LTX-2.5** | FP8 All-HBM | 720p (1280x704) 5s 121f (c=8) | 30 RPM | 9.288 RPM | **4** | **16** | **64** | **128** |
 | **LTX-2.5** | FP8 All-HBM | 1080p (1920x1088) 5s 121f | 30 RPM | 6.468 RPM | **5** | **20** | **80** | **160** |
 | **LTX-2.5** | FP8 All-HBM | 1080p Kling-V4 Proxy 20s 481f (c=8) | 30 RPM | 1.494 RPM | **21** | **84** | **336** | **672** |
 | **LTX-2.5** | BF16 | 1080p Kling-V4 Proxy 20s 481f | 30 RPM | 1.380 RPM | **22** | **88** | **352** | **704** |
