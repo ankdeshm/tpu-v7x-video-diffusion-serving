@@ -1,0 +1,100 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: suite2-v7x8-pool-b-sglang-opt
+  namespace: default
+  labels:
+    app: suite2-v7x8-pool-b-sglang-opt
+    suite: v7x-video-opt-suite2
+spec:
+  completions: 2
+  parallelism: 2
+  completionMode: Indexed
+  backoffLimit: 2
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+      labels:
+        app: suite2-v7x8-pool-b-sglang-opt
+        suite: v7x-video-opt-suite2
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      restartPolicy: Never
+      serviceAccountName: default
+      nodeSelector:
+        cloud.google.com/gke-nodepool: tpu-v7x-cluster-8-pool-b
+        cloud.google.com/gke-tpu-accelerator: tpu7x
+        cloud.google.com/gke-tpu-topology: 2x2x2
+      tolerations:
+      - key: google.com/tpu
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-queued
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-spot
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: suite2-sglang-opt
+        image: us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/sglang-torchtpu-diffusion:v0.2.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        env:
+        - name: PJRT_DEVICE
+          value: "TPU"
+        - name: GCS_BUCKET
+          value: "YOUR_GCS_BUCKET"
+        - name: GCS_PREFIX
+          value: "v7x-video-opt/results"
+        - name: SGLANG_ENCODE_URL
+          value: "http://video-encode-svc.default.svc.cluster.local:8090/encode"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token
+              key: HF_TOKEN
+              optional: true
+        command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          ulimit -c 0 || true
+          mount -o remount,size=850G /dev/shm || true
+          rm -rf /dev/shm/MiniMax-H3 /dev/shm/FastH3 /dev/shm/FastVideo \
+                 /dev/shm/LTX* /dev/shm/Wan* \
+                 /dev/shm/hf_cache /dev/shm/sglang_diffusion_cache \
+                 /dev/shm/sglang_xla_cache /dev/shm/sglang_outputs_* \
+                 /dev/shm/torch_tpu_pg_store_* /workspace/core* || true
+          df -h /dev/shm
+          TOK=$(curl -sS -H "Metadata-Flavor: Google" \
+            "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          curl -fsSL -H "Authorization: Bearer ${TOK}" \
+            "https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o/v7x-video-opt%2Fscripts%2Frun_suite2_sglang_opt.py?alt=media" \
+            -o /tmp/run_suite2_sglang_opt.py \
+          || curl -fsSL -H "Authorization: Bearer ${TOK}" \
+            "https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o/v7x-video-opt%2Frun_suite2_sglang_opt.py?alt=media" \
+            -o /tmp/run_suite2_sglang_opt.py
+          exec python3 -u /tmp/run_suite2_sglang_opt.py \
+            --gcs-bucket="${GCS_BUCKET}" \
+            --gcs-prefix="${GCS_PREFIX}" \
+            --encode-url="${SGLANG_ENCODE_URL}"
+        resources:
+          requests:
+            google.com/tpu: "4"
+            memory: "700Gi"
+          limits:
+            google.com/tpu: "4"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        hostPath:
+          path: /dev/shm
+          type: Directory

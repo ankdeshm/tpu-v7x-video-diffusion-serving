@@ -1,0 +1,101 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: suite1-v7x8-pool-a-omni-ltx-wan
+  namespace: default
+  labels:
+    app: suite1-v7x8-pool-a-omni-ltx-wan
+    suite: v7x-video-opt-suite1
+spec:
+  completions: 2
+  parallelism: 2
+  completionMode: Indexed
+  backoffLimit: 4
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+      labels:
+        app: suite1-v7x8-pool-a-omni-ltx-wan
+        suite: v7x-video-opt-suite1
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      restartPolicy: Never
+      serviceAccountName: default
+      nodeSelector:
+        cloud.google.com/gke-nodepool: tpu-v7x-cluster-8-pool-a
+        cloud.google.com/gke-tpu-accelerator: tpu7x
+        cloud.google.com/gke-tpu-topology: 2x2x2
+      tolerations:
+      - key: google.com/tpu
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-queued
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-spot
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: omni-suite1
+        image: us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/vllm-torchtpu-omni:v0.32.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        env:
+        - name: PJRT_DEVICE
+          value: "TPU"
+        - name: TPU_SKIP_MDS_QUERY
+          value: "true"
+        - name: TPU_CHIPS_PER_HOST_BOUNDS
+          value: "2,2,1"
+        - name: TPU_HOST_BOUNDS
+          value: "1,1,1"
+        - name: TPU_WORKER_ID
+          value: "0"
+        - name: TPU_WORKER_HOSTNAMES
+          value: "localhost"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token
+              key: HF_TOKEN
+              optional: true
+        command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          ulimit -c 0 || true
+          mount -o remount,size=900G /dev/shm || true
+          rm -rf /dev/shm/MiniMax-H3 /dev/shm/FastH3 /dev/shm/FastVideo \
+                 /dev/shm/LTX-2.5 /dev/shm/Wan2.2-T2V-A14B-Diffusers \
+                 /dev/shm/Wan2.2-I2V-A14B-Diffusers /dev/shm/Wan-AI \
+                 /dev/shm/hf_cache /dev/shm/xla_cache_vllm_omni \
+                 /dev/shm/vllm_omni_* /workspace/core* || true
+          df -h /dev/shm
+          TOK=$(curl -sS -H "Metadata-Flavor: Google" \
+            "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          curl -fsSL -H "Authorization: Bearer ${TOK}" \
+            "https://storage.googleapis.com/storage/v1/b/YOUR_GCS_BUCKET/o/v7x-video-opt%2Fscripts%2Frun_suite1_omni_ltx_wan.py?alt=media" \
+            -o /tmp/run_suite1_omni_ltx_wan.py
+          exec python3 -u /tmp/run_suite1_omni_ltx_wan.py \
+            --gcs-bucket=YOUR_GCS_BUCKET \
+            --gcs-prefix=v7x-video-opt \
+            --encode-svc-url=http://video-encode-svc.default.svc.cluster.local:8090/encode
+        resources:
+          requests:
+            google.com/tpu: "4"
+            memory: "700Gi"
+          limits:
+            google.com/tpu: "4"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        hostPath:
+          path: /dev/shm
+          type: Directory

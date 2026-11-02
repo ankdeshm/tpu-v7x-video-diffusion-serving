@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-encode-svc
+  namespace: default
+  labels:
+    app: video-encode-svc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: video-encode-svc
+  template:
+    metadata:
+      labels:
+        app: video-encode-svc
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: video-encode-cpu-pool
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: video-encode-svc
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: encoder
+        image: us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/vllm-torchtpu-omni:v0.32.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8090
+          name: http
+        env:
+        - name: PORT
+          value: "8090"
+        command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          mkdir -p /dev/shm/video_encode_spool
+          TOK=$(curl -sS -H "Metadata-Flavor: Google" "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          curl -fsSL -H "Authorization: Bearer ${TOK}" \
+            "https://storage.googleapis.com/storage/v1/b/YOUR_GCS_BUCKET/o/v7x-video-opt%2Fvideo_encode_server.py?alt=media" \
+            -o /tmp/video_encode_server.py
+          exec python3 -u /tmp/video_encode_server.py
+        resources:
+          requests:
+            cpu: "38"
+            memory: "140Gi"
+          limits:
+            cpu: "42"
+            memory: "160Gi"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 80Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: video-encode-svc
+  namespace: default
+  labels:
+    app: video-encode-svc
+spec:
+  selector:
+    app: video-encode-svc
+  ports:
+  - name: http
+    port: 8090
+    targetPort: 8090
+    protocol: TCP

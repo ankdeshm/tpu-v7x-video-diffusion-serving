@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: suite3a-v7x16-sglang-minimax
+  namespace: default
+  labels:
+    app: suite3a-v7x16-sglang-minimax
+    suite: v7x-video-opt-suite3a
+spec:
+  backoffLimit: 2
+  completionMode: Indexed
+  completions: 4
+  parallelism: 4
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+      labels:
+        app: suite3a-v7x16-sglang-minimax
+        suite: v7x-video-opt-suite3a
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      restartPolicy: Never
+      serviceAccountName: default
+      nodeSelector:
+        cloud.google.com/gke-nodepool: tpu-v7x-16-pool
+        cloud.google.com/gke-tpu-accelerator: tpu7x
+        cloud.google.com/gke-tpu-topology: 2x2x4
+      tolerations:
+      - key: google.com/tpu
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-queued
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: suite3a-sglang-minimax
+        image: us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/sglang-torchtpu-diffusion:v0.2.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        env:
+        - name: PJRT_DEVICE
+          value: "TPU"
+        - name: GCS_BUCKET
+          value: "YOUR_GCS_BUCKET"
+        - name: RUN_ID
+          value: "suite3a_sglang_minimax_v1"
+        - name: REMOTE_ENCODE_URL
+          value: "http://video-encode-svc.default.svc.cluster.local:8090/encode"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token
+              key: HF_TOKEN
+              optional: true
+        command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          ulimit -c 0
+          mount -o remount,size=850G /dev/shm || true
+          rm -rf /dev/shm/DeepSeek* /dev/shm/Kimi* /dev/shm/GLM* /dev/shm/flint* /dev/shm/torchtitan* /dev/shm/LTX* /dev/shm/Wan* /dev/shm/outputs /dev/shm/smoke* /dev/shm/sglang_out_* /dev/shm/sglang_diffusion_cache /dev/shm/hf_cache /dev/shm/pd_* /dev/shm/psm_* /dev/shm/sem.loky* /workspace/core* || true
+          df -h /dev/shm
+          TOK=$(curl -sS -H "Metadata-Flavor: Google" "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          curl -fsSL -H "Authorization: Bearer ${TOK}" \
+            "https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o/v7x-video-opt%2Fscripts%2Frun_suite3a_sglang_minimax.py?alt=media" \
+            -o /tmp/run_suite3a_sglang_minimax.py
+          exec python3 -u /tmp/run_suite3a_sglang_minimax.py \
+            --gcs-bucket="${GCS_BUCKET}" \
+            --run-id="${RUN_ID}" \
+            --remote-encode-url="${REMOTE_ENCODE_URL}"
+        resources:
+          requests:
+            google.com/tpu: "4"
+            memory: "700Gi"
+          limits:
+            google.com/tpu: "4"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        hostPath:
+          path: /dev/shm
+          type: Directory
