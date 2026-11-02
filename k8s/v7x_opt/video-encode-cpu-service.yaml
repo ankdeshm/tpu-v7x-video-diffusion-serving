@@ -16,7 +16,7 @@ spec:
         app: video-encode-svc
     spec:
       nodeSelector:
-        cloud.google.com/gke-nodepool: video-encode-cpu-pool
+        cloud.google.com/tpu-worker-node: video-encode-cpu-pool
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

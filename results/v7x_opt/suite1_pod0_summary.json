@@ -1,7 +1,7 @@
 {
   "updated_utc": "2026-11-02T19:01:53.182786+00:00",
   "pod_index": 0,
-  "hostname": "gke-tpu-51ea19d7-rqkr.us-central1-c.c.YOUR_GCP_PROJECT_ID.internal",
+  "hostname": "tpu-worker-nodeYOUR_GCP_PROJECT_ID.internal",
   "total_rows": 6,
   "ok_rows": 0,
   "failed_rows": 6,
@@ -11,7 +11,7 @@
   "encode_svc_url": "http://video-encode-svc.default.svc.cluster.local:8090/encode",
   "encode_svc_health": {
     "status": "ok",
-    "hostname": "video-encode-svc-64cfdd7dcf-4z7hw",
+    "hostname": "video-encode-pod",
     "cpu_model": "Intel(R) Xeon(R) Platinum 8481C CPU @ 2.70GHz",
     "vcpus": 44,
     "total_jobs": 24,
