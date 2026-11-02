@@ -6,10 +6,10 @@ steps:
   - '-f'
   - 'Dockerfile.vllm_omni'
   - '-t'
-  - 'us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/vllm-torchtpu-omni:v0.32.0'
+  - 'us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/vllm-torchtpu-omni:v0.32.0'
   - '.'
 images:
-- 'us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/vllm-torchtpu-omni:v0.32.0'
+- 'us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/vllm-torchtpu-omni:v0.32.0'
 options:
   machineType: 'E2_HIGHCPU_32'
 timeout: '1800s'

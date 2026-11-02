@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Priority #3: Wan 2.2 A14B (`Wan2.2-I2V-A14B-Diffusers` & `Wan2.2-T2V-A14B-Diffusers` 28.6B Total / 14.3B Active Two-Stage MoE DiT) Serving Benchmark Suite on TPU v7x.
 
-Runs across the 4 steady Flex TPU v7x hosts (`ank-tpu-v7x-16-pool`, 4 chips / 8 TensorCores / 768 GiB HBM3e per host =
+Runs across the 4 steady Flex TPU v7x hosts (`tpu-v7x-16-pool`, 4 chips / 8 TensorCores / 768 GiB HBM3e per host =
 16 physical v7x chips / 32 TensorCores / 3,072 GiB HBM3e slice-wide):
 
 Phase 3A — 4-Host Simultaneous Single-Host Configuration & Input-Distribution Matrix (`sglang-torchtpu`):
@@ -580,8 +580,8 @@ def build_tpu_server_env(
             "VBAR_CONTROL_SERVICE_URL": "unix:///var/run/tpu-plugin/vbar.sock",
             "GCE_METADATA_HOST": "127.0.0.1:80",
             "GCE_METADATA_IP": "127.0.0.1",
-            "GOOGLE_CLOUD_PROJECT": "tpu-prod-env-one-vm",
-            "GCLOUD_PROJECT": "tpu-prod-env-one-vm",
+            "GOOGLE_CLOUD_PROJECT": "mock-tpu-project",
+            "GCLOUD_PROJECT": "mock-tpu-project",
             "LD_PRELOAD": "/workspace/metadata_hook.so",
             "HF_HOME": "/dev/shm/hf_cache",
             "HF_HUB_CACHE": "/dev/shm/hf_cache/hub",
@@ -895,7 +895,7 @@ def format_markdown_summary(
         f"# Priority #3 — Wan 2.2 A14B (I2V-A14B & T2V-A14B MoE DiT) Serving on TPU v7x (`{run_id}`)",
         "",
         f"- **Updated (UTC):** `{utc_now()}`",
-        "- **Cluster / Nodepool:** `ank-tpu-v7x` / `ank-tpu-v7x-16-pool` (Steady Flex `v7x-16`, `16` physical chips / `32` TensorCores / `3,072 GiB` HBM3e)",
+        "- **Cluster / Nodepool:** `tpu-v7x-cluster` / `tpu-v7x-16-pool` (Steady Flex `v7x-16`, `16` physical chips / `32` TensorCores / `3,072 GiB` HBM3e)",
         f"- **Registered Hosts:** `{json.dumps({k: v['hostname'] for k, v in sorted(nodes.items())})}`",
         "",
         "## 1. Single-Host (`4x` & `2x` TPU v7x Chips) Configuration & Input-Distribution Matrix",
@@ -934,7 +934,7 @@ def format_markdown_summary(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gcs-bucket", default="ank-usc1-bucket-314837540096")
+    ap.add_argument("--gcs-bucket", default="YOUR_GCS_BUCKET")
     ap.add_argument("--run-id", default="v7x_flex_wan22_serve_p3")
     args = ap.parse_args()
 

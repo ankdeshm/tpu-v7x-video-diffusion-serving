@@ -5,7 +5,7 @@ import requests
 from google.cloud import storage
 from huggingface_hub import HfApi, hf_hub_url
 
-BUCKET = "ank-usc1-bucket-314837540096"
+BUCKET = "YOUR_GCS_BUCKET"
 PREFIX = "models"
 HF_TOKEN = os.environ.get("HF_TOKEN") or None
 

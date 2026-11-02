@@ -1,92 +1,53 @@
-# Cloud TPU `v7x` (`2x2x1` Single-Host & `2x2x4` `v7x-16` Slice) Video+Audio Diffusion Serving (`MiniMax-H3`, `LTX-2.5`, `Wan 2.2 A14B`)
+# Cloud TPU `v7x` (`Ironwood`, `2x2x4` `v7x-16`) Video + Stereo-Audio Diffusion Serving (`MiniMax-H3`, `LTX-2.5`, `Wan 2.2 A14B`)
 
-Reproducible serving infrastructure, containers, Kubernetes Indexed Job manifests, and multi-configuration benchmark harnesses for **multimodal video + stereo audio diffusion models** on **Cloud TPU `v7x` (Ironwood)** using **`sglang-torchtpu`** (`TpuOOTPlatform` + `tpu_splash_attn` Pallas Mosaic FlashAttention) and **`vllm-torchtpu` (`vLLM-Omni` v0.32.0)**:
+Reproducible multi-host serving infrastructure, containers, Kubernetes Indexed Job manifests, and **`109`-point empirical benchmark suite** for **video + stereo-audio diffusion models** on **Cloud TPU `v7x-16` (`Ironwood`, `2x2x4` = 4 hosts × 4 chips/host = `16` physical chips / `32` TensorCores, `3,072 GiB` HBM3e)** using **`sglang-torchtpu`** (`SGLANG_TPU_SPLASH_VARLEN=1` Pallas Mosaic FlashAttention + `Ulysses=8` + All-HBM FP8/BF16) and **`vllm-torchtpu` (`vLLM-Omni`)**.
 
-1. **Priority #1 — [`MiniMaxAI/MiniMax-H3`](https://huggingface.co/MiniMaxAI/MiniMax-H3) (`FL2VA` Joint Video+Audio `t2va` & `fl2va` I2V) & [`FastVideo/FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree`](https://huggingface.co/FastVideo/FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree)**
-   - **Target Spec:** `i2v 768P 15s` (`1344×768`, `15.0s` @ `24 fps` = `360` frames + `32 kHz` stereo AAC audio, `4`-step distilled / `12`-step / `25`-step / `49`-step) + `5s` (`124f`), `10s` (`244f`), `9:16` Portrait (`768×1344`), and `512p` (`896×512`).
-   - **Configurations:** Single-host `4x TPU v7x` chips (`8` TensorCores, `Ulysses=8`) & `2x TPU v7x` chips (`Ulysses=4`), `BF16` vs Online `FP8` (`--quantization fp8`), `Pallas Mosaic FlashAttention varlen` (`SGLANG_TPU_SPLASH_VARLEN=1`) vs stock `SDPA varlen`, Precomputed vs Online `AdaLN`, and `16`-chip `v7x-16` `DP=4 × Ulysses=8` 30-RPM slice sizing.
-2. **Priority #2 — [`Lightricks/LTX-2.5-Diffusers`](https://huggingface.co/Lightricks/LTX-2.5-Diffusers) (`22B` Asymmetric Dual-Stream Video+Audio DiT + `2×` Diffusion Decoder Upscaler)**
-   - **Target Specs:** Standard `8`-step distilled (`960×544` & `1280×704` `720p` across `5s` `121f`, `10s` `241f`, `20s` `481f`), `20`-step dev schedule, and **Two-Stage `1080p` (`1920×1088`, `use_diffusion_decoder=True`) `20s` (`481` frames @ `24 fps`, `bs=1`) Kling-V4 Proxy**.
-   - **Configurations:** `sglang-torchtpu` (`BF16` vs `FP8`, `Ulysses=8` vs `CFG=2 × Ulysses=4`, `4`-chip vs `2`-chip) and `vllm-torchtpu` (`vLLM-Omni` `--omni --usp 8`), plus `16`-chip `DP=4` concurrency sweep (`c=4, 8`).
-3. **Priority #3 — [`Wan-AI/Wan2.2-I2V-A14B-Diffusers`](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B-Diffusers) & [`Wan-AI/Wan2.2-T2V-A14B-Diffusers`](https://huggingface.co/Wan-AI/Wan2.2-T2V-A14B-Diffusers) (`28.6B` Total / `14.3B` Active Two-Stage High/Low-Noise MoE DiT)**
-   - **Target Specs:** `480p` (`832×480`, `81f` `5s` @ `16 fps`), `720p` (`1280×720`, `81f` `5s` & `161f` `10s`), `720p` `9:16` Portrait (`720×1280`, `81f`), across `4`-step fast, `20`-step, and `40`-step schedules.
-   - **Configurations:** `sglang-torchtpu` (`BF16` & `FP8`, `Ulysses=8` & `CFG=2 × Ulysses=4`) and `vllm-torchtpu` (`vLLM-Omni` `--omni --usp 8`), plus `16`-chip `DP=4` slice throughput.
+- **Full Exhaustive 109-Point Benchmark Report:** [`BENCHMARK_RESULTS.md`](./BENCHMARK_RESULTS.md)
 
 ---
 
-## 1. Key TPU `v7x` Serving Architecture & Optimizations
+## 1. Benchmark Highlights & 30-RPM Fleet Sizing → Exact Script (`#line`), Manifest & Proof
 
-| Feature | Implementation | Impact |
-|---|---|---|
-| **Single-Host `2x2x1` Isolation on `2x2x4` Multi-Host Slices** | `LD_PRELOAD=/workspace/metadata_hook.so` + local `mock_metadata.py` (`TPU_CHIPS_PER_HOST_BOUNDS=2,2,1`) | Runs **4 independent `4`-chip (`8`-TensorCore, `768 GiB` HBM3e) servers** simultaneously on one `v7x-16` slice (`DP=4 × Ulysses=8`) with zero cross-host ICI barriers |
-| **Hardware Pallas Mosaic FlashAttention (`SGLANG_TPU_SPLASH_VARLEN=1`)** | Routes `TpuSplashAttentionImpl.forward_varlen` through `v7x` `64 MiB` VMEM Pallas `flash_attention` (`256×256` MXU blocks) instead of fallback `SDPA` | Eliminates $O(S^2)$ attention HBM materialization at `MiniMax-H3` `768p 15s` (`S \approx 95\text{K}` tokens) |
-| **TPU Seeded Generator Deadlock Prevention** | Passes `"generator_device": "cpu"` in `/v1/videos` requests | Avoids GIL deadlock in blocking host-to-device RNG seed copy on `torch_tpu` |
-| **850 GiB `/dev/shm` RAM-Disk Checkpoint Staging** | Multi-threaded HTTP Range streaming from regional GCS (`us-central1`) into `/dev/shm` | Hydrates `160–288 GB` diffusion + VLM encoder checkpoints in `<35s` with zero disk bottlenecks |
-
-> **Compatibility with TPU `v5p-16` / `v5p-32`:** Each `v5p` host (`4` chips = `8` TensorCores = `384 GiB` HBM2e) also fits all three models (`44–114 GB` BF16) on a single host (`DP=4` on `v5p-16`, `DP=8` on `v5p-32`) in `BF16`. Because `tpu_splash_attn.py` guards its `64 MiB`-VMEM Pallas kernel to `TPU7x`, `v5p` (`16 MiB` VMEM, `128×128` MXU, BF16-native) automatically falls back to XLA `SDPA` + `Ulysses=8` (or `Ulysses=16` across 2 hosts for ultra-long `15s–20s` sequences).
-
----
-
-## 2. Repository Structure
-
-```text
-├── README.md
-├── docker/
-│   ├── Dockerfile.sglang_tpu                   # TorchTPU 0.2.0 + sglang-torchtpu + Pallas varlen patch + ffmpeg
-│   ├── prep_sglang_tpu.py                      # ABI constraint lock + TOML-verified sglang-torchtpu setup
-│   ├── Dockerfile.vllm_omni                    # TorchTPU 0.2.0 + vllm-torchtpu v0.32.0 + vLLM-Omni (CPU/TPU target)
-│   └── prep_vllm_omni.py                       # ABI constraint lock for vLLM-Omni on TPU
-├── scripts/
-│   ├── stage_all_video_models_gcs.py           # Parallel HF Hub -> regional GCS stager for MiniMax-H3, FastH3, LTX-2.5, Wan 2.2
-│   ├── run_v7x_minimax_h3_serving.py           # Priority #1: MiniMax-H3 (FL2VA i2v + t2va) & FastH3 4-step VSA benchmark suite
-│   ├── run_v7x_ltx25_serving.py                # Priority #2: LTX-2.5 (incl. 1080p 20s Kling-V4 proxy) across sglang & vLLM-Omni
-│   └── run_v7x_wan22_serving.py                # Priority #3: Wan 2.2 A14B (I2V & T2V) across sglang & vLLM-Omni
-├── k8s/
-│   ├── v7x-16-flex-minimax-h3-serving.yaml     # Indexed Job (4x4=16 v7x chips) for Priority #1 MiniMax-H3 + FastH3
-│   ├── v7x-16-flex-ltx25-serving.yaml          # Indexed Job (4x4=16 v7x chips) for Priority #2 LTX-2.5
-│   └── v7x-16-flex-wan22-serving.yaml          # Indexed Job (4x4=16 v7x chips) for Priority #3 Wan 2.2 A14B
-└── results/                                    # Auto-synced Markdown & JSON benchmark summaries
-```
+| Model | Precision & Mode | Workload | Single-Host (`4` Chips) | `16`-Chip Slice (`DP=4`) | Slices (`Hosts` / `Chips`) for `30 RPM` | Script (`#line`) & Manifest | Empirical Result Proof |
+|---|---|---|---:|---:|---|---|---|
+| **`LTX-2.5`** | **FP8 All-HBM (`U=8`)** | `544p` (`960×544`) `5s 121f` (`c=8`) | `2.563 RPM` | **`10.019 RPM`** | `3` slices (`12` hosts / `48` chips) | [`ltx25.py#L244`](./scripts/run_v7x_ltx25_serving.py#L244-L320) · [`#L1067`](./scripts/run_v7x_ltx25_serving.py#L1067-L1200) · [`yaml`](./k8s/v7x-16-flex-ltx25-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`JSON`](./results/v7x_flex_ltx25_serve_p2/summary.json) · [`Pod0`](./results/v7x_flex_ltx25_serve_p2/pod_0_results.json) |
+| **`LTX-2.5`** | **FP8 All-HBM (`U=8`)** | `720p` (`1280×720`) `5s 121f` (`c=8`) | `2.045 RPM` | **`9.288 RPM`** | `4` slices (`16` hosts / `64` chips) | [`ltx25.py#L1067`](./scripts/run_v7x_ltx25_serving.py#L1067-L1200) · [`yaml`](./k8s/v7x-16-flex-ltx25-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`JSON`](./results/v7x_flex_ltx25_serve_p2/summary.json) |
+| **`LTX-2.5`** | **FP8 All-HBM (`U=8`)** | **`1080p` Kling-V4 Proxy `20s 481f`** (`c=8`) | `0.371 RPM` | **`1.494 RPM`** *(`0.498x` RTF)* | `21` slices (`84` hosts / `336` chips) | [`ltx25.py#L579`](./scripts/run_v7x_ltx25_serving.py#L579-L690) · [`yaml`](./k8s/v7x-16-flex-ltx25-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`JSON`](./results/v7x_flex_ltx25_serve_p2/summary.json) |
+| **`Wan 2.2 T2V`** | **FP8 All-HBM (`U=8`)** | `480p` (`832×480`) `5s 81f` (`4`-step fast) | **`3.387 RPM`** | **`13.548 RPM`** | `3` slices (`12` hosts / `48` chips) | [`wan22.py#L249`](./scripts/run_v7x_wan22_serving.py#L249-L425) · [`#L762`](./scripts/run_v7x_wan22_serving.py#L762-L885) · [`yaml`](./k8s/v7x-16-flex-wan22-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`JSON`](./results/v7x_flex_wan22_serve_p3/summary.json) · [`Pod0`](./results/v7x_flex_wan22_serve_p3/pod_0_results.json) |
+| **`Wan 2.2 I2V`** | **FP8 All-HBM (`U=8`)** | `480p` (`832×480`) `5s 81f` (`4`-step, `c=8`) | `2.640 RPM` | **`10.633 RPM`** | `3` slices (`12` hosts / `48` chips) | [`wan22.py#L762`](./scripts/run_v7x_wan22_serving.py#L762-L885) · [`yaml`](./k8s/v7x-16-flex-wan22-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`JSON`](./results/v7x_flex_wan22_serve_p3/summary.json) |
+| **`Wan 2.2 I2V`** | **FP8 All-HBM (`U=8`)** | `720p` (`1280×720`) `5s 81f` (`4`-step, `c=8`) | `1.105 RPM` | **`4.431 RPM`** | `7` slices (`28` hosts / `112` chips) | [`wan22.py#L762`](./scripts/run_v7x_wan22_serving.py#L762-L885) · [`yaml`](./k8s/v7x-16-flex-wan22-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`JSON`](./results/v7x_flex_wan22_serve_p3/summary.json) |
+| **`Wan 2.2 I2V`** | **FP8 All-HBM (`U=8`)** | `720p` `5s 81f` / `10s 161f` (`20`-step, `c=4`) | `0.311` / `0.118` | **`1.243` / `0.473 RPM`** | `25` / `64` slices | [`wan22.py#L762`](./scripts/run_v7x_wan22_serving.py#L762-L885) · [`yaml`](./k8s/v7x-16-flex-wan22-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`JSON`](./results/v7x_flex_wan22_serve_p3/summary.json) |
+| **`MiniMax-H3`** | **FP8 + Pallas FlashAttn** | `768p` (`1344×768`) **`15s` (`4`-step, `175.51s`)** | **`0.342 RPM`** | **`1.368 RPM`** | `22` slices (`88` hosts / `352` chips) | [`minimax.py#L246`](./scripts/run_v7x_minimax_h3_serving.py#L246-L420) · [`#L1270`](./scripts/run_v7x_minimax_h3_serving.py#L1270-L1420) · [`yaml`](./k8s/v7x-16-flex-minimax-h3-serving.yaml) | [`Report`](./BENCHMARK_RESULTS.md) · [`Pod0 JSON`](./results/v7x_flex_minimax_h3_serve_p1/pod_0_results.json) |
 
 ---
 
-## 3. Quickstart
+## 2. How Baseline Serving Was Optimized on TPU `v7x-16`
+
+| Step | What Changed Over Stock `sglang-torchtpu` Baseline | Code Anchor | Measured Impact |
+|---|---|---|---|
+| **1. All-HBM-Resident FP8 (`--dit-cpu-offload=false`, `--quantization fp8`)** | Eliminated default host-CPU PCIe model offloading by keeping DiT + text/vision encoders + VAEs resident in `768 GiB`/host HBM3e | [`build_tpu_server_env#L789`](./scripts/run_v7x_ltx25_serving.py#L789-L878) · [`wan22.py#L511`](./scripts/run_v7x_wan22_serving.py#L511-L600) | **`+47%` to `+54%` throughput speedup** |
+| **2. Hardware Pallas Mosaic FlashAttention (`SGLANG_TPU_SPLASH_VARLEN=1`)** | Routed `TpuSplashAttentionImpl.forward_varlen` through `v7x` `64 MiB` VMEM Pallas `flash_attention` (`256×256` MXU blocks) instead of fallback `SDPA` | [`apply_sglang_tpu_runtime_patches#L246`](./scripts/run_v7x_minimax_h3_serving.py#L246-L420) | Eliminated $O(S^2)$ HBM OOM at `MiniMax-H3` `768p 15s` (`S ≈ 95K` tokens -> **`175.51s`**) |
+| **3. Single-Host `2x2x1` Metadata Isolation (`DP=4 × Ulysses=8`)** | `LD_PRELOAD=/workspace/metadata_hook.so` + `mock_metadata.py` (`CHIPS_PER_HOST_BOUNDS=2,2,1`) isolates all 4 hosts on `2x2x4` + avoids PJRT `CFG=2` subgroup collective deadlocks | [`setup_single_host_metadata_hook#L694`](./scripts/run_v7x_ltx25_serving.py#L694-L722) | **`4.02×–4.03×` linear scaling** from 1 host (`4` chips) to full `v7x-16` slice (`16` chips) |
+
+---
+
+## 3. Repository Structure & Quickstart
+
+- [`BENCHMARK_RESULTS.md`](./BENCHMARK_RESULTS.md) — Complete `109`-evaluation report across `MiniMax-H3`, `LTX-2.5`, and `Wan 2.2`
+- [`docker/Dockerfile.sglang_tpu`](./docker/Dockerfile.sglang_tpu), [`docker/prep_sglang_tpu.py`](./docker/prep_sglang_tpu.py), [`docker/Dockerfile.vllm_omni`](./docker/Dockerfile.vllm_omni), [`docker/prep_vllm_omni.py`](./docker/prep_vllm_omni.py)
+- [`scripts/run_v7x_minimax_h3_serving.py`](./scripts/run_v7x_minimax_h3_serving.py) — Priority #1: `MiniMax-H3` (`FL2VA` `i2v` + `t2va`) & `FastH3` benchmark suite
+- [`scripts/run_v7x_ltx25_serving.py`](./scripts/run_v7x_ltx25_serving.py) — Priority #2: `LTX-2.5` (incl. Two-Stage `1080p` `20s` Kling-V4 proxy) suite
+- [`scripts/run_v7x_wan22_serving.py`](./scripts/run_v7x_wan22_serving.py) — Priority #3: `Wan 2.2 A14B` (`I2V` & `T2V`) suite
+- [`scripts/stage_all_video_models_gcs.py`](./scripts/stage_all_video_models_gcs.py) — Parallel HF Hub -> regional GCS stager
+- [`k8s/v7x-16-flex-minimax-h3-serving.yaml`](./k8s/v7x-16-flex-minimax-h3-serving.yaml), [`k8s/v7x-16-flex-ltx25-serving.yaml`](./k8s/v7x-16-flex-ltx25-serving.yaml), [`k8s/v7x-16-flex-wan22-serving.yaml`](./k8s/v7x-16-flex-wan22-serving.yaml)
+- [`results/`](./results/) — Per-pod & slice `summary.json` outputs (`v7x_flex_ltx25_serve_p2`, `v7x_flex_wan22_serve_p3`, `v7x_flex_minimax_h3_serve_p1`)
 
 ```bash
 # 1. Upload serving benchmark harnesses to regional GCS
-gcloud storage cp scripts/run_v7x_*.py gs://ank-usc1-bucket-314837540096/video-serving-scripts/
+gcloud storage cp scripts/run_v7x_*.py gs://YOUR_GCS_BUCKET/video-serving-scripts/
 
-# 2. Run Priority #1: MiniMax-H3 (i2v 768p 15s + input/config matrix) & FastH3 on steady Flex v7x-16
-kubectl --context=gke_diesel-patrol-382622_us-central1_ank-tpu-v7x apply -f k8s/v7x-16-flex-minimax-h3-serving.yaml
-
-# 3. Run Priority #2: LTX-2.5 (incl. Two-Stage 1080p 20s Kling-V4 proxy) on steady Flex v7x-16
-kubectl --context=gke_diesel-patrol-382622_us-central1_ank-tpu-v7x apply -f k8s/v7x-16-flex-ltx25-serving.yaml
-
-# 4. Run Priority #3: Wan 2.2 A14B (I2V & T2V) on steady Flex v7x-16
-kubectl --context=gke_diesel-patrol-382622_us-central1_ank-tpu-v7x apply -f k8s/v7x-16-flex-wan22-serving.yaml
+# 2. Launch Priority #1 (MiniMax-H3), #2 (LTX-2.5), and #3 (Wan 2.2) on TPU v7x-16 (2x2x4)
+kubectl apply -f k8s/v7x-16-flex-minimax-h3-serving.yaml
+kubectl apply -f k8s/v7x-16-flex-ltx25-serving.yaml
+kubectl apply -f k8s/v7x-16-flex-wan22-serving.yaml
 ```
-
----
-
-## 4. Benchmark Results & 30-RPM Sizing Summary
-
-Full exhaustive benchmark report with 109 individual evaluations across MiniMax-H3, LTX-2.5, and Wan 2.2 is available in **[BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md)**.
-
-### Highlights:
-
-| Model | Architecture | Workload | Single-Host (4 chips) | 16-Chip Slice (DP=4) | Slices for 30 RPM | Hosts (Chips) for 30 RPM |
-|---|---|---|---|---|---|---|
-| **LTX-2.5** | FP8 All-HBM | 544p (960x544) 5s 121f ($c=8$) | 2.563 RPM | **10.019 RPM** | 3 slices | 12 hosts (48 chips) |
-| **LTX-2.5** | FP8 All-HBM | 720p (1280x720) 5s 121f ($c=8$) | 2.045 RPM | **9.288 RPM** | 4 slices | 16 hosts (64 chips) |
-| **LTX-2.5** | FP8 All-HBM | **1080p Kling-V4 Proxy 20s 481f** ($c=8$) | 0.371 RPM | **1.494 RPM** (0.498x RTF) | 21 slices | 84 hosts (336 chips) |
-| **Wan 2.2 T2V** | FP8 All-HBM | 480p (832x480) 5s 81f (4-step fast) | **3.387 RPM** | **13.548 RPM** | 3 slices | 12 hosts (48 chips) |
-| **Wan 2.2 I2V** | FP8 All-HBM | 480p (832x480) 5s 81f (4-step fast, $c=8$) | 2.640 RPM | **10.633 RPM** | 3 slices | 12 hosts (48 chips) |
-| **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 5s 81f (4-step fast, $c=8$) | 1.105 RPM | **4.431 RPM** | 7 slices | 28 hosts (112 chips) |
-| **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 5s 81f (20-step, $c=4$) | 0.311 RPM | **1.243 RPM** | 25 slices | 100 hosts (400 chips) |
-| **Wan 2.2 I2V** | FP8 All-HBM | 720p (1280x720) 10s 161f (20-step, $c=4$) | 0.118 RPM | **0.473 RPM** | 64 slices | 256 hosts (1,024 chips) |
-| **MiniMax-H3** | FP8 | 768p (1344x768) 15s (4-step VSA) | **0.342 RPM** | **1.368 RPM** | 22 slices | 88 hosts (352 chips) |
-
-### Key Takeaways:
-1. **Linear Multi-Host Scaling:** SGLang DP=4 on TPU v7x-16 scales with near 100% linear efficiency (4.02x scale factor on LTX-2.5 Kling-V4 proxy, 4.03x on Wan 2.2).
-2. **All-HBM-Resident FP8:** 96 GiB HBM3e per TensorCore eliminates CPU host offload bottlenecks, providing a +47% to +54% throughput boost.
-3. **Collective Communication Standardization:** Global `dist.group.WORLD` sequence parallelism (`Ulysses=8`) is rock-solid on TPU PJRT, while subgroup collectives (`dist.new_group` in CFG=2) trigger PJRT collective deadlocks.

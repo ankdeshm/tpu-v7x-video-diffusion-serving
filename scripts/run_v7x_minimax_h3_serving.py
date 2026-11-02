@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Priority #1: MiniMax-H3 & FastH3 (4-step VSA Distilled) Video+Audio Serving Benchmark Suite on TPU v7x.
 
-Runs across the 4 steady Flex TPU v7x hosts (`ank-tpu-v7x-16-pool`, 4 chips / 8 TensorCores / 768 GB HBM per host =
+Runs across the 4 steady Flex TPU v7x hosts (`tpu-v7x-16-pool`, 4 chips / 8 TensorCores / 768 GB HBM per host =
 16 physical v7x chips / 32 TensorCores / 3,072 GB HBM slice-wide):
 
 Phase 1A — 4-Host Simultaneous Single-Host (4x TPU v7x chips = 8 TensorCores) Configuration & Input-Distribution Matrix:
@@ -11,7 +11,7 @@ Phase 1A — 4-Host Simultaneous Single-Host (4x TPU v7x chips = 8 TensorCores) 
   - Pod 3: `FastH3` (`FastVideo/FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree` — 4-step VSA distilled MiniMax-H3), Ulysses=8, BF16 then Online FP8 (`--quantization fp8`)
 
   Input Distributions Swept (`bs=1` + concurrency `c=1, 2`):
-    * Exact Atlas Cloud Spec: `i2v 768P 15s` (`fl2va`, 1344x768, 15.0s @ 24fps = 360 frames + 32kHz stereo audio) & `t2va 768P 15s`
+    * Exact Cloud TPU Spec: `i2v 768P 15s` (`fl2va`, 1344x768, 15.0s @ 24fps = 360 frames + 32kHz stereo audio) & `t2va 768P 15s`
       across 4 denoising steps (`num_inference_steps=5`), 12 steps (`13`), 25 steps (`26`), and 49 steps (`50`)
     * Standard 768p 16:9 Durations: `768p 5s` (124 frames), `768p 10s` (244 frames), `768p 15s` (360 frames)
     * Multi-Aspect & Preview Tiers: `768p 9:16 Portrait 5s` (768x1344), `512p 16:9 5s & 15s` (896x512)
@@ -985,8 +985,8 @@ def build_tpu_server_env(
             "VBAR_CONTROL_SERVICE_URL": "unix:///var/run/tpu-plugin/vbar.sock",
             "GCE_METADATA_HOST": "127.0.0.1:80",
             "GCE_METADATA_IP": "127.0.0.1",
-            "GOOGLE_CLOUD_PROJECT": "tpu-prod-env-one-vm",
-            "GCLOUD_PROJECT": "tpu-prod-env-one-vm",
+            "GOOGLE_CLOUD_PROJECT": "mock-tpu-project",
+            "GCLOUD_PROJECT": "mock-tpu-project",
             "LD_PRELOAD": "/workspace/metadata_hook.so",
             "HF_HOME": "/dev/shm/hf_cache",
             "HF_HUB_CACHE": "/dev/shm/hf_cache/hub",
@@ -1433,7 +1433,7 @@ def format_markdown_summary(
         f"# Priority #1 — MiniMax-H3 & FastH3 Video+Audio Serving on TPU v7x (`{run_id}`)",
         "",
         f"- **Updated (UTC):** `{utc_now()}`",
-        "- **Cluster / Nodepool:** `ank-tpu-v7x` / `ank-tpu-v7x-16-pool` (Steady Flex `v7x-16`, `4` hosts × `4` physical `v7x` chips = `16` physical chips / `32` TensorCores / `3,072 GiB` HBM3e)",
+        "- **Cluster / Nodepool:** `tpu-v7x-cluster` / `tpu-v7x-16-pool` (Steady Flex `v7x-16`, `4` hosts × `4` physical `v7x` chips = `16` physical chips / `32` TensorCores / `3,072 GiB` HBM3e)",
         "- **Serving Engine:** `sglang-torchtpu` (`TpuOOTPlatform`, `tpu_splash_attn` Pallas Mosaic FlashAttention + Ulysses Sequence Parallelism, 24 fps H.264 + 32 kHz stereo AAC muxed `.mp4`)",
         f"- **Registered Hosts:** `{json.dumps({k: v['hostname'] for k, v in sorted(nodes.items())})}`",
         "",
@@ -1475,7 +1475,7 @@ def format_markdown_summary(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gcs-bucket", default="ank-usc1-bucket-314837540096")
+    ap.add_argument("--gcs-bucket", default="YOUR_GCS_BUCKET")
     ap.add_argument("--run-id", default="v7x_flex_minimax_h3_serve_p1")
     args = ap.parse_args()
 
@@ -1520,7 +1520,7 @@ def main() -> None:
 
     # Define input-distribution workloads
     base_workloads = [
-        # Exact Atlas Cloud target: i2v 768P 15s (4-step, 12-step, 25-step, 49-step) + t2va 768P 15s
+        # Exact Cloud TPU target: i2v 768P 15s (4-step, 12-step, 25-step, 49-step) + t2va 768P 15s
         {"label": "768p 16:9 15s i2v (4-step)", "task": "fl2va", "short_edge": 768, "aspect_ratio": "16:9", "duration_seconds": 15.0, "num_inference_steps": 5, "concurrency": 1, "num_requests": 2},
         {"label": "768p 16:9 15s t2va (4-step)", "task": "t2va", "short_edge": 768, "aspect_ratio": "16:9", "duration_seconds": 15.0, "num_inference_steps": 5, "concurrency": 1, "num_requests": 2},
         {"label": "768p 16:9 15s i2v (12-step)", "task": "fl2va", "short_edge": 768, "aspect_ratio": "16:9", "duration_seconds": 15.0, "num_inference_steps": 13, "concurrency": 1, "num_requests": 2},
@@ -1967,7 +1967,7 @@ def main() -> None:
             cluster_rows: list[dict[str, Any]] = []
 
             cluster_suites = [
-                # 1. Exact Atlas Cloud i2v 768P 15s (4-step) at c=4 and c=8 across 16 v7x chips
+                # 1. Exact Cloud TPU i2v 768P 15s (4-step) at c=4 and c=8 across 16 v7x chips
                 {"label": "768p 16:9 15s i2v (4-step)", "mode": "fixed", "dur": 15.0, "steps": 5, "conc": 4, "n": 8},
                 {"label": "768p 16:9 15s i2v (4-step)", "mode": "fixed", "dur": 15.0, "steps": 5, "conc": 8, "n": 12},
                 # 2. 768p 16:9 15s i2v (25-step) at c=4

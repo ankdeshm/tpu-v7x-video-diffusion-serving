@@ -24,7 +24,7 @@ spec:
       restartPolicy: Never
       serviceAccountName: default
       nodeSelector:
-        cloud.google.com/gke-nodepool: ank-tpu-v7x-16-pool
+        cloud.google.com/gke-nodepool: tpu-v7x-16-pool
         cloud.google.com/gke-tpu-accelerator: tpu7x
         cloud.google.com/gke-tpu-topology: 2x2x4
       tolerations:
@@ -36,7 +36,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: ltx25-serve
-        image: us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/sglang-torchtpu-diffusion:v0.2.0
+        image: us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/sglang-torchtpu-diffusion:v0.2.0
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
@@ -59,10 +59,10 @@ spec:
           df -h /dev/shm
           TOK=$(curl -sS -H "Metadata-Flavor: Google" "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
           curl -fsSL -H "Authorization: Bearer ${TOK}" \
-            "https://storage.googleapis.com/storage/v1/b/ank-usc1-bucket-314837540096/o/video-serving-scripts%2Frun_v7x_ltx25_serving.py?alt=media" \
+            "https://storage.googleapis.com/storage/v1/b/YOUR_GCS_BUCKET/o/video-serving-scripts%2Frun_v7x_ltx25_serving.py?alt=media" \
             -o /tmp/run_v7x_ltx25_serving.py
           exec python3 -u /tmp/run_v7x_ltx25_serving.py \
-            --gcs-bucket=ank-usc1-bucket-314837540096 \
+            --gcs-bucket=YOUR_GCS_BUCKET \
             --run-id=v7x_flex_ltx25_serve_p2
         resources:
           requests:

@@ -5,25 +5,25 @@
     "0": {
       "idx": 0,
       "ip": "192.168.100.14",
-      "hostname": "gke-tpu-b44c435a-5cch.us-central1-c.c.diesel-patrol-382622.internal",
+      "hostname": "gke-tpu-b44c435a-5cch.us-central1-c.c.YOUR_GCP_PROJECT_ID.internal",
       "ts": "2026-11-01T00:02:06.941266+00:00"
     },
     "1": {
       "idx": 1,
       "ip": "192.168.100.16",
-      "hostname": "gke-tpu-b44c435a-6d34.us-central1-c.c.diesel-patrol-382622.internal",
+      "hostname": "gke-tpu-b44c435a-6d34.us-central1-c.c.YOUR_GCP_PROJECT_ID.internal",
       "ts": "2026-11-01T00:02:06.929754+00:00"
     },
     "2": {
       "idx": 2,
       "ip": "192.168.100.9",
-      "hostname": "gke-tpu-b44c435a-kxr6.us-central1-c.c.diesel-patrol-382622.internal",
+      "hostname": "gke-tpu-b44c435a-kxr6.us-central1-c.c.YOUR_GCP_PROJECT_ID.internal",
       "ts": "2026-11-01T00:02:06.927856+00:00"
     },
     "3": {
       "idx": 3,
       "ip": "192.168.100.19",
-      "hostname": "gke-tpu-b44c435a-w61p.us-central1-c.c.diesel-patrol-382622.internal",
+      "hostname": "gke-tpu-b44c435a-w61p.us-central1-c.c.YOUR_GCP_PROJECT_ID.internal",
       "ts": "2026-11-01T00:02:06.936059+00:00"
     }
   },

@@ -1,7 +1,7 @@
 # TPU v7x-16 (Ironwood) Video + Audio Diffusion Serving Benchmark
 ## Production Multi-Host Performance Report & 30-RPM Sizing Analysis
 
-**Evaluation Environment:** Cluster 2 (`gke_diesel-patrol-382622_us-central1_ank-tpu-v7x`), Nodepool `ank-tpu-v7x-16-pool`  
+**Evaluation Environment:** Cluster 2 (`gke_YOUR_GCP_PROJECT_ID_us-central1_tpu-v7x-cluster`), Nodepool `tpu-v7x-16-pool`  
 **Hardware Topology:** 4 Flex Hosts $\times$ 4 `v7x` Chips = 16 Chips / 32 TensorCores (3,072 GiB HBM3e aggregate, 96 GiB/core)  
 **Serving Engine:** SGLang-TorchTPU runtime with Pallas FlashAttention, Online FP8 MXU Quantization, and Sequence Parallelism (Ulysses=8)  
 **Target Workloads:** MiniMax-H3 FL2VA, Lightricks LTX-2.5-Diffusers (incl. Kling-V4 1080p 20s Proxy), and Wan 2.2 A14B (T2V & I2V)  

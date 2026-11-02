@@ -6,10 +6,10 @@ steps:
   - '-f'
   - 'Dockerfile.sglang_tpu'
   - '-t'
-  - 'us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/sglang-torchtpu-diffusion:v0.2.0'
+  - 'us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/sglang-torchtpu-diffusion:v0.2.0'
   - '.'
 images:
-- 'us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/sglang-torchtpu-diffusion:v0.2.0'
+- 'us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/sglang-torchtpu-diffusion:v0.2.0'
 options:
   machineType: 'E2_HIGHCPU_32'
 timeout: '1800s'

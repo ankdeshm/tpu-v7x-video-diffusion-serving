@@ -1,4 +1,4 @@
-FROM us-central1-docker.pkg.dev/diesel-patrol-382622/vllm/vllm-torchtpu-bench:v0.32.0
+FROM us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/vllm/vllm-torchtpu-bench:v0.32.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libgl1 libglib2.0-0 libsndfile1 gcc g++ make git curl netcat-openbsd && rm -rf /var/lib/apt/lists/*
 
